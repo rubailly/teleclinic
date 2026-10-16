@@ -8,7 +8,7 @@ MAVEN := docker run --rm -v "$(CURDIR)/services/core":/w -v teleclinic-m2:/root/
 	-v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
 	--add-host=host.docker.internal:host-gateway maven:3.9.9-eclipse-temurin-21 mvn -B -q $(MVN_NET)
 
-.PHONY: help up-lite down reset doctor test smoke logs ps release-up
+.PHONY: help up-lite down reset doctor test smoke journey logs ps release-up
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -36,6 +36,9 @@ test: ## Unit and module-boundary tests for the core (Java 21 in a container)
 
 smoke: .env ## End-to-end login through the edge as patient1 (BFF, no token in the browser)
 	./scripts/smoke/login.sh patient1
+
+journey: .env ## End-to-end web journey: consent, triage, co-payment, webhook, queue, Kafka, webhook attacks
+	./scripts/smoke/journey.sh
 
 logs: .env ## Follow logs of all services
 	$(COMPOSE) logs -f --tail=100

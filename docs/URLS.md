@@ -6,8 +6,10 @@
 | Release running behind the edge | http://localhost:9080/api/public/version | `{"version":"v1.4","color":"blue"}` |
 | IremboAccount stand-in (Keycloak) | http://localhost:9180 | Realm `irembo-mock`; admin console at `/admin` |
 | HAProxy stats | http://localhost:9404/stats | Blue/green pool weights and health |
+| IremboPay mock: hosted checkout | http://localhost:9280/checkout/{paymentId} | Labelled mock; scenario controls under `/admin` |
+| IremboPay mock: webhook log | http://localhost:9280/admin/deliveries | Every webhook sent and what the core answered |
 
-Internal only (not published on the host): HAProxy `core` pool on `:9100`, HAProxy runtime API on `:9999`, core on `:8080`.
+Internal only (not published on the host): HAProxy `core` pool on `:9100`, HAProxy runtime API on `:9999`, core on `:8080`, Postgres on `:5432`, Kafka on `:9092`.
 
 Ports 80, 8080, 5432 and 6379 are often taken on developer machines, so the demo stays in the 9xxx range.
 Credentials are demo-only and live in `.env.example`.

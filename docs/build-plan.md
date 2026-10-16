@@ -2,7 +2,7 @@
 
 ## Build order (stop and test at each step)
 1. Repo skeleton, Makefile, Keycloak realm, HAProxy and APISIX, core behind the gateway with BFF login. **Done.**
-2. Core journey: consent (including guardian consent), rules triage, consultation saga, irembopay-mock with signed, duplicate and forged webhooks and the coverage check, webhook dedupe and status check, outbox to Kafka. Web journey for `patient2`.
+2. Core journey: consent (including guardian consent), rules triage, consultation saga, irembopay-mock with signed, duplicate and forged webhooks and the coverage check, webhook dedupe and status check, outbox to Kafka. Web journey for `patient2`. **Done** (API and `make journey`; the patient web app itself comes with the other apps).
 3. Patroni with 3 etcd and HAProxy for Postgres; Kafka KRaft x3; Valkey for shared sessions. Scenarios `kill-db-leader`, `kill-kafka-broker`, `partition-node`.
 4. Clinician review (state machine, API, UI). Anonymizer and model service. Kill switch and rules-only banner.
 5. OpenMRS O3 (seeded) and OpenFn workflows: outbound, inbound polling, echo drop, conflict queue, identifier write-back.
