@@ -1,0 +1,66 @@
+# Red-flag triage rules. ILLUSTRATIVE ONLY: the real content comes from the national clinical protocol
+# approved by clinical leadership (design assumption A7). The engine evaluates every rule; the final urgency
+# is the highest match, and the advice comes from the first rule at that urgency.
+version: "2026.1"
+
+# Coded symptoms accepted at intake (USSD never accepts free text)
+symptoms:
+  - fever
+  - cough
+  - fast_breathing
+  - difficulty_breathing
+  - chest_pain
+  - convulsions
+  - unconscious
+  - severe_bleeding
+  - bleeding
+  - diarrhoea
+  - vomiting
+  - headache
+  - rash
+  - abdominal_pain
+
+default:
+  urgency: ROUTINE
+  advice: "A nurse will review your answers. If you feel worse before the call, go to the nearest health facility."
+
+rules:
+  - id: danger_sign
+    when: { anySymptom: [unconscious, convulsions, severe_bleeding, difficulty_breathing, chest_pain] }
+    urgency: EMERGENCY
+    redFlag: danger_sign
+    advice: "Danger sign. Go to the nearest health facility now or call the emergency number."
+
+  - id: low_oxygen
+    when: { vitalBelow: { spo2: 92 } }
+    urgency: EMERGENCY
+    redFlag: low_oxygen
+    advice: "Danger sign. Go to the nearest health facility now or call the emergency number."
+
+  - id: bleeding_in_pregnancy
+    when: { allSymptoms: [bleeding], pregnant: true }
+    urgency: EMERGENCY
+    redFlag: bleeding_in_pregnancy
+    advice: "Bleeding in pregnancy is a danger sign. Go to the nearest health facility now."
+
+  - id: fast_breathing_child
+    when: { allSymptoms: [fast_breathing], ageBands: ["0-4", "5-11"] }
+    urgency: URGENT
+    redFlag: fast_breathing_child
+    advice: "Go to the nearest health facility today. If breathing gets worse, call the emergency number."
+
+  - id: high_fever
+    when: { vitalAtLeast: { temperatureC: 39.5 } }
+    urgency: URGENT
+    redFlag: high_fever
+    advice: "High fever. Go to the nearest health facility today."
+
+  - id: prolonged_fever
+    when: { allSymptoms: [fever], minDurationDays: 3 }
+    urgency: URGENT
+    advice: "Fever for three days or more needs a check today. A nurse will call you."
+
+  - id: fever
+    when: { anySymptom: [fever] }
+    urgency: SEMI_URGENT
+    advice: "A nurse will call you today. Drink fluids and rest. If you feel worse, go to a health facility."
