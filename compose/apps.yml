@@ -1,0 +1,42 @@
+# Application tier. core-blue is live; core-green starts only for a release (profile "release").
+x-core: &core
+  build:
+    context: ./services/core
+  environment: &core-env
+    PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+    OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL}/realms/${OIDC_REALM}
+    OIDC_INTERNAL_BASE_URL: http://keycloak:8080/realms/${OIDC_REALM}
+    OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+    OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+    SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE}
+    JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+  depends_on:
+    keycloak:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health/readiness | grep -q UP"]
+    interval: 5s
+    timeout: 3s
+    retries: 30
+    start_period: 20s
+  mem_limit: 512m
+  restart: unless-stopped
+  networks: [teleclinic]
+
+services:
+  core-blue:
+    <<: *core
+    image: teleclinic/core:v1.4
+    environment:
+      <<: *core-env
+      RELEASE_COLOR: blue
+      RELEASE_VERSION: v1.4
+
+  core-green:
+    <<: *core
+    image: teleclinic/core:v1.5
+    profiles: ["release"]
+    environment:
+      <<: *core-env
+      RELEASE_COLOR: green
+      RELEASE_VERSION: v1.5
