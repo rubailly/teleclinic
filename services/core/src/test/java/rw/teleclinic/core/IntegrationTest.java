@@ -20,7 +20,10 @@ import org.testcontainers.containers.PostgreSQLContainer;
         "teleclinic.identity.internal-base-url=http://idp.internal/realms/irembo-mock",
         "teleclinic.identity.client-secret=test-secret",
         "spring.flyway.locations=classpath:db/migration,classpath:db/demo",
-        "spring.modulith.events.externalization.enabled=false"
+        "spring.modulith.events.externalization.enabled=false",
+        "teleclinic.payments.webhook-secret=test-webhook-secret",
+        // Tests drive the payment timer themselves
+        "teleclinic.consultation.timer-initial-delay=PT1H"
 })
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {

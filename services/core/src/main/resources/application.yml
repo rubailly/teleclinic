@@ -15,19 +15,19 @@ spring:
     producer:
       acks: all
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      # The value serializer is set in code (shared.KafkaJson) with the application's JSON settings
       properties:
         enable.idempotence: true
-        spring.json.add.type.headers: false
   modulith:
+    # Events stored but not yet sent (crash between commit and publish) go out again on restart.
+    # In Spring Modulith 1.2 this key sits directly under spring.modulith.
+    republish-outstanding-events-on-restart: true
     events:
       jdbc:
         schema-initialization:
           enabled: true
       externalization:
         enabled: true
-      # Events stored but not yet sent (crash between commit and publish) go out again on restart
-      republish-outstanding-events-on-restart: true
 
 server:
   port: 8080
@@ -78,7 +78,9 @@ teleclinic:
     # Illustrative fee in RWF; real tariffs are out of scope (Section 2.1)
     fee: 3000
     currency: RWF
-    payment-window: 10m
+    payment-window: ${PAYMENT_WINDOW:10m}
+    timer-interval: PT15S   # ISO-8601: @Scheduled does not accept "15s"
+    public-base-url: ${PUBLIC_BASE_URL:http://localhost:9080}
   insurance:
     # National insurance coverage check (CBHI/Mutuelle, RSSB). A labelled mock in the demo (assumption A12).
     base-url: ${INSURANCE_INTERNAL_URL:http://localhost:8000}
