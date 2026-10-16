@@ -19,6 +19,7 @@ x-core: &core
     INSURANCE_INTERNAL_URL: http://irembopay-mock:8000
     IREMBOPAY_CALLBACK_URL: http://haproxy:9080/webhooks/irembopay
     IREMBOPAY_WEBHOOK_SECRET: ${IREMBOPAY_WEBHOOK_SECRET}
+    PAYMENT_WINDOW: ${PAYMENT_WINDOW}
     JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
   depends_on:
     keycloak:
@@ -38,6 +39,24 @@ x-core: &core
   networks: [teleclinic]
 
 services:
+  irembopay-mock:
+    build:
+      context: ./services/irembopay-mock
+    image: teleclinic/irembopay-mock:dev
+    environment:
+      PUBLIC_URL: ${IREMBOPAY_PUBLIC_URL}
+      WEBHOOK_SECRET: ${IREMBOPAY_WEBHOOK_SECRET}
+    ports:
+      - "9280:8000"   # hosted checkout page the browser is sent to
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 128m
+    restart: unless-stopped
+    networks: [teleclinic]
+
   core-blue:
     <<: *core
     image: teleclinic/core:v1.4
