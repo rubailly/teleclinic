@@ -24,8 +24,8 @@ check "IremboAccount stand-in (OIDC)" bash -c "curl -fsS --max-time 3 $KEYCLOAK_
 haproxy_pool() { curl -fsS --max-time 3 "http://localhost:9404/stats;csv" | awk -F, '$1=="core" && $2!="BACKEND" {printf "%s=%s(w%s) ", $2, $18, $19}'; }
 check "HAProxy blue/green pool"       haproxy_pool
 
-for svc in $(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/apps.yml ps --services 2>/dev/null); do
-  check "container: $svc" bash -c "docker inspect --format '{{.State.Health.Status}}' \$(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/apps.yml ps -q $svc) | grep -x healthy"
+for svc in $(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/apps.yml ps --services 2>/dev/null); do
+  check "container: $svc" bash -c "docker inspect --format '{{.State.Health.Status}}' \$(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/apps.yml ps -q $svc) | grep -x healthy"
 done
 
 if [ "$fails" -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) failed."; fi

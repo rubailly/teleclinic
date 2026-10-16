@@ -24,6 +24,8 @@ import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 /**
@@ -72,17 +74,30 @@ class SecurityConfig {
 
         http
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/public/**", "/actuator/health/**", "/login", "/error").permitAll()
+                // Webhooks authenticate by signature, not by session (payments module)
+                .requestMatchers("/api/public/**", "/actuator/health/**", "/login", "/error", "/webhooks/**").permitAll()
                 .anyRequest().authenticated())
             .oauth2Login(login -> login
                 .loginPage("/login")
                 .authorizationEndpoint(endpoint -> endpoint.authorizationRequestResolver(authorizationRequests))
                 .userInfoEndpoint(userInfo -> userInfo.userAuthoritiesMapper(rolesFromIdToken())))
             .logout(logout -> logout.logoutSuccessHandler(logoutSuccess))
+            // Browser apps read XSRF-TOKEN and send it back as X-XSRF-TOKEN; webhooks are signed instead
+            .csrf(csrf -> csrf
+                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                .csrfTokenRequestHandler(eagerCsrfToken())
+                .ignoringRequestMatchers("/webhooks/**"))
             // APIs answer 401 instead of redirecting, so the apps can start the login themselves
             .exceptionHandling(e -> e.defaultAuthenticationEntryPointFor(
                     new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), new AntPathRequestMatcher("/api/**")));
         return http.build();
+    }
+
+    /** Loads the token on every request so the XSRF-TOKEN cookie is always present for the apps. */
+    private static CsrfTokenRequestAttributeHandler eagerCsrfToken() {
+        CsrfTokenRequestAttributeHandler handler = new CsrfTokenRequestAttributeHandler();
+        handler.setCsrfRequestAttributeName(null);
+        return handler;
     }
 
     /** Maps the IremboAccount "roles" claim (patient, clinician, clerk, admin) to ROLE_* authorities. */

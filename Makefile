@@ -1,9 +1,12 @@
 # TeleClinic reference platform. Run `make help` for the targets.
 SHELL := /bin/bash
-COMPOSE := docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/apps.yml
+COMPOSE := docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/apps.yml
 # Fail and retry a stalled download instead of hanging
 MVN_NET := -Daether.connector.connectTimeout=20000 -Daether.connector.requestTimeout=60000
-MAVEN := docker run --rm -v "$(CURDIR)/services/core":/w -v teleclinic-m2:/root/.m2 -w /w maven:3.9.9-eclipse-temurin-21 mvn -B -q $(MVN_NET)
+# Integration tests start a throwaway Postgres through the host Docker daemon (Testcontainers)
+MAVEN := docker run --rm -v "$(CURDIR)/services/core":/w -v teleclinic-m2:/root/.m2 -w /w \
+	-v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
+	--add-host=host.docker.internal:host-gateway maven:3.9.9-eclipse-temurin-21 mvn -B -q $(MVN_NET)
 
 .PHONY: help up-lite down reset doctor test smoke logs ps release-up
 

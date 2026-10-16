@@ -1,6 +1,33 @@
 spring:
   application:
     name: teleclinic-core
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/teleclinic}
+    username: ${DB_USER:teleclinic}
+    password: ${DB_PASSWORD:not-set}
+  flyway:
+    # One schema per module; modules own their tables (ADR-001)
+    schemas: patient_index,consent,consultation,payments
+    default-schema: public
+    locations: ${FLYWAY_LOCATIONS:classpath:db/migration}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        enable.idempotence: true
+        spring.json.add.type.headers: false
+  modulith:
+    events:
+      jdbc:
+        schema-initialization:
+          enabled: true
+      externalization:
+        enabled: true
+      # Events stored but not yet sent (crash between commit and publish) go out again on restart
+      republish-outstanding-events-on-restart: true
 
 server:
   port: 8080
@@ -40,3 +67,18 @@ teleclinic:
     internal-base-url: ${OIDC_INTERNAL_BASE_URL:http://localhost:9180/realms/irembo-mock}
     client-id: ${OIDC_CLIENT_ID:teleclinic-core}
     client-secret: ${OIDC_CLIENT_SECRET:not-set}
+  payments:
+    # IremboPay (labelled mock in the demo). Server-to-server calls use the internal URL.
+    base-url: ${IREMBOPAY_INTERNAL_URL:http://localhost:8000}
+    webhook-secret: ${IREMBOPAY_WEBHOOK_SECRET:not-set}
+    # Where IremboPay sends webhooks: through the public edge, like any external caller
+    callback-url: ${IREMBOPAY_CALLBACK_URL:http://localhost:9080/webhooks/irembopay}
+    signature-tolerance: 5m
+  consultation:
+    # Illustrative fee in RWF; real tariffs are out of scope (Section 2.1)
+    fee: 3000
+    currency: RWF
+    payment-window: 10m
+  insurance:
+    # National insurance coverage check (CBHI/Mutuelle, RSSB). A labelled mock in the demo (assumption A12).
+    base-url: ${INSURANCE_INTERNAL_URL:http://localhost:8000}

@@ -13,18 +13,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
+import rw.teleclinic.core.IntegrationTest;
 
-@SpringBootTest(properties = {
-        "teleclinic.identity.issuer=http://idp.test/realms/irembo-mock",
-        "teleclinic.identity.internal-base-url=http://idp.internal/realms/irembo-mock",
-        "teleclinic.identity.client-secret=test-secret"
-})
-@AutoConfigureMockMvc
-class SessionSecurityTests {
+class SessionSecurityTests extends IntegrationTest {
 
     @Autowired
     MockMvc mvc;

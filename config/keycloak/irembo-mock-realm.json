@@ -11,10 +11,22 @@
   "ssoSessionIdleTimeout": 1800,
   "roles": {
     "realm": [
-      { "name": "patient", "description": "Citizen using TeleClinic" },
-      { "name": "clinician", "description": "Clinician reviewing triage and running consultations" },
-      { "name": "clerk", "description": "Identity reviewer for the patient-matching queue" },
-      { "name": "admin", "description": "Platform operator" }
+      {
+        "name": "patient",
+        "description": "Citizen using TeleClinic"
+      },
+      {
+        "name": "clinician",
+        "description": "Clinician reviewing triage and running consultations"
+      },
+      {
+        "name": "clerk",
+        "description": "Identity reviewer for the patient-matching queue"
+      },
+      {
+        "name": "admin",
+        "description": "Platform operator"
+      }
     ]
   },
   "clients": [
@@ -30,13 +42,24 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["${PUBLIC_BASE_URL}/login/oauth2/code/iremboaccount"],
-      "webOrigins": ["${PUBLIC_BASE_URL}"],
+      "redirectUris": [
+        "${PUBLIC_BASE_URL}/login/oauth2/code/iremboaccount"
+      ],
+      "webOrigins": [
+        "${PUBLIC_BASE_URL}"
+      ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "${PUBLIC_BASE_URL}/*"
       },
-      "defaultClientScopes": ["basic", "profile", "email", "roles", "web-origins", "acr"],
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "email",
+        "roles",
+        "web-origins",
+        "acr"
+      ],
       "protocolMappers": [
         {
           "name": "realm roles in id token",
@@ -56,54 +79,99 @@
   ],
   "users": [
     {
+      "id": "00000000-0000-4000-a000-000000000001",
       "username": "patient1",
       "firstName": "Uwase",
       "lastName": "Demo",
       "email": "patient1@example.invalid",
       "emailVerified": true,
       "enabled": true,
-      "realmRoles": ["patient"],
-      "credentials": [{ "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }]
+      "realmRoles": [
+        "patient"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
     },
     {
+      "id": "00000000-0000-4000-a000-000000000002",
       "username": "patient2",
       "firstName": "Eric",
       "lastName": "Demo",
       "email": "patient2@example.invalid",
       "emailVerified": true,
       "enabled": true,
-      "realmRoles": ["patient"],
-      "credentials": [{ "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }]
+      "realmRoles": [
+        "patient"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
     },
     {
+      "id": "00000000-0000-4000-a000-000000000101",
       "username": "clinician1",
       "firstName": "Dr",
       "lastName": "Mukamana",
       "email": "clinician1@example.invalid",
       "emailVerified": true,
       "enabled": true,
-      "realmRoles": ["clinician"],
-      "credentials": [{ "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }]
+      "realmRoles": [
+        "clinician"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
     },
     {
+      "id": "00000000-0000-4000-a000-000000000201",
       "username": "clerk1",
       "firstName": "Habimana",
       "lastName": "Demo",
       "email": "clerk1@example.invalid",
       "emailVerified": true,
       "enabled": true,
-      "realmRoles": ["clerk"],
-      "credentials": [{ "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }]
+      "realmRoles": [
+        "clerk"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
     },
     {
+      "id": "00000000-0000-4000-a000-000000000301",
       "username": "admin1",
       "firstName": "Ops",
       "lastName": "Admin",
       "email": "admin1@example.invalid",
       "emailVerified": true,
       "enabled": true,
-      "realmRoles": ["admin"],
-      "credentials": [{ "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }]
+      "realmRoles": [
+        "admin"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
     }
   ]
 }
