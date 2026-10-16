@@ -1,0 +1,358 @@
+openapi: 3.1.0
+info:
+  title: TeleClinic Interoperability and Sync API
+  version: 1.0.0
+  summary: FHIR R4 facade, patient matching and sync-gateway control endpoints
+  description: |
+    High-level contract for the interoperability layer of TeleClinic.
+    Clinical resources follow HL7 FHIR R4 (4.0.1) and the TeleClinic national profiles.
+    Every call is authenticated with an OIDC access token, authorised by scope and consent,
+    and written to the audit trail (who, what, which patient, purpose of use).
+servers:
+  - url: https://api.teleclinic.example/interop/v1
+    description: Production (on-premise)
+security:
+  - oidc: [system/Patient.read]
+tags:
+  - name: FHIR
+  - name: Identity
+  - name: Sync
+paths:
+  /fhir/metadata:
+    get:
+      tags: [FHIR]
+      summary: Capability statement (profiles, search parameters, operations)
+      security: []
+      responses:
+        '200':
+          description: FHIR CapabilityStatement
+          content:
+            application/fhir+json:
+              schema: {$ref: '#/components/schemas/FhirResource'}
+  /fhir/Patient/$match:
+    post:
+      tags: [FHIR, Identity]
+      summary: Find candidate patients (probabilistic match, scored)
+      description: |
+        Implements the FHIR Patient $match operation. Returns a searchset Bundle where each entry
+        carries a score and a match-grade (certain, probable, possible, certainly-not).
+        It never merges anything: linking is a separate, audited decision.
+      security: [{oidc: [system/Patient.read]}]
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema: {$ref: '#/components/schemas/FhirResource'}
+      responses:
+        '200':
+          description: Bundle of candidates with scores
+          content:
+            application/fhir+json:
+              schema: {$ref: '#/components/schemas/FhirResource'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+  /fhir/Patient/{id}:
+    get:
+      tags: [FHIR]
+      summary: Read a patient (profile-conformant)
+      parameters:
+        - {$ref: '#/components/parameters/ResourceId'}
+        - {$ref: '#/components/parameters/Purpose'}
+      security: [{oidc: [patient/Patient.read]}]
+      responses:
+        '200':
+          description: FHIR Patient with ETag version
+          headers:
+            ETag: {schema: {type: string}, description: 'W/"version" used for If-Match updates'}
+          content:
+            application/fhir+json:
+              schema: {$ref: '#/components/schemas/FhirResource'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /fhir/Patient:
+    get:
+      tags: [FHIR]
+      summary: Search patients by identifier or demographics
+      parameters:
+        - {name: identifier, in: query, schema: {type: string}, description: 'system|value, for example national ID or IremboAccount subject'}
+        - {name: family, in: query, schema: {type: string}}
+        - {name: birthdate, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/Purpose'}
+      responses:
+        '200':
+          description: searchset Bundle
+          content:
+            application/fhir+json:
+              schema: {$ref: '#/components/schemas/FhirResource'}
+  /fhir/Encounter:
+    get:
+      tags: [FHIR]
+      summary: Search consultations (Encounter)
+      parameters:
+        - {name: patient, in: query, required: true, schema: {type: string}}
+        - {name: date, in: query, schema: {type: string}, description: 'for example ge2026-01-01'}
+        - {$ref: '#/components/parameters/Purpose'}
+      security: [{oidc: [patient/Encounter.read]}]
+      responses:
+        '200':
+          description: searchset Bundle
+          content:
+            application/fhir+json:
+              schema: {$ref: '#/components/schemas/FhirResource'}
+  /fhir/Observation:
+    get:
+      tags: [FHIR]
+      summary: Search observations such as vital signs and results
+      parameters:
+        - {name: patient, in: query, required: true, schema: {type: string}}
+        - {name: code, in: query, schema: {type: string}, description: 'system|code, for example http://loinc.org|8480-6'}
+        - {name: _sort, in: query, schema: {type: string}, example: '-date'}
+        - {$ref: '#/components/parameters/Purpose'}
+      security: [{oidc: [patient/Observation.read]}]
+      responses:
+        '200':
+          description: searchset Bundle
+          content:
+            application/fhir+json:
+              schema: {$ref: '#/components/schemas/FhirResource'}
+  /fhir:
+    post:
+      tags: [FHIR]
+      summary: Submit a transaction Bundle (atomic)
+      description: |
+        Creates Patient, Encounter, Observation, Condition and MedicationRequest in one atomic unit.
+        Use conditional create (If-None-Exist inside entries) to stay idempotent on retries.
+      security: [{oidc: [system/*.write]}]
+      parameters:
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema: {$ref: '#/components/schemas/FhirResource'}
+      responses:
+        '200':
+          description: transaction-response Bundle
+          content:
+            application/fhir+json:
+              schema: {$ref: '#/components/schemas/FhirResource'}
+        '409':
+          description: Version conflict (If-Match failed); sent to the conflict queue
+          content:
+            application/fhir+json:
+              schema: {$ref: '#/components/schemas/OperationOutcome'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+  /fhir/AuditEvent:
+    get:
+      tags: [FHIR]
+      summary: Who accessed or changed this patient's data
+      parameters:
+        - {name: entity, in: query, required: true, schema: {type: string}, example: 'Patient/123'}
+        - {name: date, in: query, schema: {type: string}}
+      security: [{oidc: [system/AuditEvent.read]}]
+      responses:
+        '200':
+          description: searchset Bundle of AuditEvent
+          content:
+            application/fhir+json:
+              schema: {$ref: '#/components/schemas/FhirResource'}
+  /identity/links:
+    post:
+      tags: [Identity]
+      summary: Record a link decision between two patient records
+      description: Creates a reversible Patient.link. Requires human approval unless the score is above the auto-link threshold and two strong identifiers agree.
+      security: [{oidc: [system/Identity.write]}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LinkDecision'}
+      responses:
+        '201':
+          description: Link created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LinkDecision'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /identity/links/{linkId}:
+    delete:
+      tags: [Identity]
+      summary: Unlink (correct a wrong link); source records are untouched
+      parameters:
+        - {name: linkId, in: path, required: true, schema: {type: string}}
+      security: [{oidc: [system/Identity.write]}]
+      responses:
+        '204': {description: Unlinked and audited}
+  /identity/review-queue:
+    get:
+      tags: [Identity]
+      summary: Medium-confidence candidate pairs awaiting a clerk
+      security: [{oidc: [system/Identity.review]}]
+      responses:
+        '200':
+          description: Page of candidate pairs with side-by-side evidence
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/ReviewItem'}}
+  /sync/ledger/{resourceType}/{id}:
+    get:
+      tags: [Sync]
+      summary: Sync ledger entry for one record (ids, versions, hash, origin)
+      parameters:
+        - {name: resourceType, in: path, required: true, schema: {type: string}}
+        - {$ref: '#/components/parameters/ResourceId'}
+      security: [{oidc: [system/Sync.read]}]
+      responses:
+        '200':
+          description: Ledger entry
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LedgerEntry'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /sync/inbound:
+    post:
+      tags: [Sync]
+      summary: Receive a change detected in an external EMR (called by the sync gateway)
+      description: Echoes (origin tag is ours, or content hash unchanged) are acknowledged and dropped. Others go through the conflict policy.
+      security: [{oidc: [system/Sync.write]}]
+      parameters:
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/InboundChange'}
+      responses:
+        '202': {description: Accepted for processing}
+        '200': {description: 'Echo detected, ignored'}
+  /sync/conflicts:
+    get:
+      tags: [Sync]
+      summary: Open conflicts needing a human decision
+      security: [{oidc: [system/Sync.review]}]
+      responses:
+        '200':
+          description: Open conflicts
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Conflict'}}
+  /sync/conflicts/{conflictId}/resolve:
+    post:
+      tags: [Sync]
+      summary: Resolve a conflict (keep teleclinic, keep external, or manual merge)
+      parameters:
+        - {name: conflictId, in: path, required: true, schema: {type: string}}
+      security: [{oidc: [system/Sync.review]}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision, reason]
+              properties:
+                decision: {type: string, enum: [KEEP_TELECLINIC, KEEP_EXTERNAL, MANUAL]}
+                reason: {type: string}
+      responses:
+        '200': {description: Resolved and audited}
+components:
+  securitySchemes:
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: https://account.irembo.example/.well-known/openid-configuration
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string}
+    Purpose:
+      name: X-Purpose-Of-Use
+      in: header
+      required: true
+      schema: {type: string, enum: [TREAT, PAYMENT, OPERATIONS, PATIENT_ACCESS, BREAK_GLASS]}
+      description: Recorded in the audit trail. BREAK_GLASS additionally requires X-Break-Glass-Reason and raises an alert.
+  responses:
+    Forbidden:
+      description: Missing scope, no consent, or policy denied
+      content: {application/fhir+json: {schema: {$ref: '#/components/schemas/OperationOutcome'}}}
+    NotFound:
+      description: Not found
+      content: {application/fhir+json: {schema: {$ref: '#/components/schemas/OperationOutcome'}}}
+    Unprocessable:
+      description: Resource fails profile validation
+      content: {application/fhir+json: {schema: {$ref: '#/components/schemas/OperationOutcome'}}}
+    Conflict:
+      description: Conflicting state
+      content: {application/json: {schema: {$ref: '#/components/schemas/OperationOutcome'}}}
+  schemas:
+    FhirResource:
+      type: object
+      required: [resourceType]
+      properties:
+        resourceType: {type: string}
+      additionalProperties: true
+    OperationOutcome:
+      type: object
+      required: [resourceType, issue]
+      properties:
+        resourceType: {type: string, const: OperationOutcome}
+        issue:
+          type: array
+          items:
+            type: object
+            properties:
+              severity: {type: string}
+              code: {type: string}
+              diagnostics: {type: string}
+    LinkDecision:
+      type: object
+      required: [sourcePatient, targetPatient, linkType, decidedBy, reason]
+      properties:
+        id: {type: string}
+        sourcePatient: {type: string, example: 'Patient/abc'}
+        targetPatient: {type: string, example: 'Patient/xyz'}
+        linkType: {type: string, enum: [seealso, refer, replaced-by, replaces]}
+        score: {type: number}
+        decidedBy: {type: string, description: 'user id, or "auto" when above threshold with two strong identifiers'}
+        reason: {type: string}
+        decidedAt: {type: string, format: date-time}
+    ReviewItem:
+      type: object
+      properties:
+        id: {type: string}
+        left: {$ref: '#/components/schemas/FhirResource'}
+        right: {$ref: '#/components/schemas/FhirResource'}
+        score: {type: number}
+        agreeingFields: {type: array, items: {type: string}}
+        conflictingFields: {type: array, items: {type: string}}
+    LedgerEntry:
+      type: object
+      properties:
+        resourceType: {type: string}
+        teleclinicId: {type: string}
+        externalSystem: {type: string, example: openmrs-facility-12}
+        externalId: {type: string}
+        lastSyncedVersion: {type: integer}
+        contentHash: {type: string}
+        origin: {type: string, enum: [teleclinic, external]}
+        lastSyncedAt: {type: string, format: date-time}
+        status: {type: string, enum: [IN_SYNC, PENDING, FAILED, CONFLICT]}
+    InboundChange:
+      type: object
+      required: [externalSystem, resource, origin, contentHash]
+      properties:
+        externalSystem: {type: string}
+        resource: {$ref: '#/components/schemas/FhirResource'}
+        origin: {type: string}
+        contentHash: {type: string}
+        sourceVersion: {type: string}
+    Conflict:
+      type: object
+      properties:
+        id: {type: string}
+        resourceType: {type: string}
+        teleclinicVersion: {type: string}
+        externalVersion: {type: string}
+        fields: {type: array, items: {type: string}}
+        openedAt: {type: string, format: date-time}

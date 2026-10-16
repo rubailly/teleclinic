@@ -1,0 +1,235 @@
+openapi: 3.1.0
+info:
+  title: TeleClinic AI Triage API
+  version: 1.0.0
+  summary: Deterministic safety rules (synchronous) plus model suggestions (asynchronous) with human review
+  description: |
+    Safety-first triage contract. The synchronous rules endpoint answers inside a USSD or web session.
+    The model produces an AI_PROPOSED suggestion asynchronously. A suggestion can only raise urgency,
+    and nothing clinical is finalised until a practitioner confirms or overrides it.
+servers:
+  - url: https://api.teleclinic.example/triage/v1
+security:
+  - oidc: [triage.read]
+tags:
+  - name: Rules (synchronous)
+  - name: Model (asynchronous)
+  - name: Review
+  - name: Governance
+paths:
+  /rules/evaluate:
+    post:
+      tags: [Rules (synchronous)]
+      summary: Evaluate red-flag rules inside the user session (target p95 under 100 ms)
+      security: [{oidc: [triage.evaluate]}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TriageIntake'}
+      responses:
+        '200':
+          description: Rule result. Emergency advice is shown to the patient immediately.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RuleResult'}
+        '422': {description: Intake failed validation}
+  /cases/{caseId}/inference:
+    post:
+      tags: [Model (asynchronous)]
+      summary: Queue model inference (features are anonymised before leaving the core)
+      parameters:
+        - {name: caseId, in: path, required: true, schema: {type: string}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}}
+      security: [{oidc: [triage.infer]}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/InferenceRequest'}
+      responses:
+        '202':
+          description: Accepted. Poll the suggestion or wait for the webhook.
+          headers:
+            Location: {schema: {type: string}}
+  /cases/{caseId}/suggestion:
+    get:
+      tags: [Model (asynchronous)]
+      summary: Read the current suggestion
+      parameters:
+        - {name: caseId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Suggestion in its current state, from RULES_ONLY or AI_PROPOSED through to FINAL
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Suggestion'}
+        '404': {description: No suggestion yet (rules-only case)}
+  /cases/{caseId}/review:
+    post:
+      tags: [Review]
+      summary: Practitioner confirms or overrides the suggestion
+      description: Only a user with the clinician role can call this. Overrides require a reason. The decision is signed and audited.
+      parameters:
+        - {name: caseId, in: path, required: true, schema: {type: string}}
+      security: [{oidc: [triage.review]}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviewDecision'}
+      responses:
+        '200':
+          description: Case is FINAL; orders, referrals and prescriptions are unlocked
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Suggestion'}
+        '403': {description: Caller is not a clinician for this case}
+        '409': {description: Case already finalised}
+  /anonymize:
+    post:
+      tags: [Model (asynchronous)]
+      summary: Internal. Mask identifiers and return model-safe features
+      description: mTLS only. Applies the field allowlist, runs PII recognizers (national ID, phone, names), redacts free text and replaces identifiers with tokens held in the pseudonym vault.
+      security: [{mtls: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AnonymizeRequest'}
+      responses:
+        '200':
+          description: Masked payload and redaction report
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AnonymizeResponse'}
+  /models/active:
+    get:
+      tags: [Governance]
+      summary: Model version, training data window, validation metrics and model card link
+      responses:
+        '200':
+          description: Active model metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelInfo'}
+  /models/kill-switch:
+    post:
+      tags: [Governance]
+      summary: Disable model suggestions immediately (system falls back to rules only)
+      security: [{oidc: [triage.admin]}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties: {reason: {type: string}}
+      responses:
+        '200': {description: Model disabled and audited}
+webhooks:
+  suggestionReady:
+    post:
+      summary: Sent to the core when a suggestion is AI_PROPOSED
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Suggestion'}
+      responses:
+        '200': {description: Acknowledged}
+components:
+  securitySchemes:
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: https://account.irembo.example/.well-known/openid-configuration
+    mtls:
+      type: mutualTLS
+  schemas:
+    Urgency:
+      type: string
+      enum: [ROUTINE, SEMI_URGENT, URGENT, EMERGENCY]
+    TriageIntake:
+      type: object
+      required: [caseId, channel, ageBand, sex, symptoms]
+      properties:
+        caseId: {type: string}
+        channel: {type: string, enum: [WEB, MOBILE, USSD, VOICE]}
+        ageBand: {type: string, example: '5-11'}
+        sex: {type: string, enum: [F, M, OTHER, UNKNOWN]}
+        pregnant: {type: boolean}
+        symptoms:
+          type: array
+          items: {type: string, description: 'coded symptom id from the national symptom list'}
+        durationDays: {type: integer}
+        vitals:
+          type: object
+          properties:
+            temperatureC: {type: number}
+            heartRate: {type: integer}
+            respiratoryRate: {type: integer}
+            spo2: {type: integer}
+        freeText: {type: string, description: 'Not accepted on USSD. Redacted before any model use.'}
+    RuleResult:
+      type: object
+      required: [urgency, redFlags, rulesetVersion]
+      properties:
+        urgency: {$ref: '#/components/schemas/Urgency'}
+        redFlags: {type: array, items: {type: string}}
+        patientAdvice: {type: string, maxLength: 160, description: 'Short text that fits a USSD screen'}
+        rulesetVersion: {type: string}
+        requiresClinicianReview: {type: boolean}
+    InferenceRequest:
+      type: object
+      required: [anonymisedFeatures, rulesUrgency]
+      properties:
+        anonymisedFeatures: {type: object, additionalProperties: true}
+        rulesUrgency: {$ref: '#/components/schemas/Urgency'}
+        callbackUrl: {type: string, format: uri}
+    Suggestion:
+      type: object
+      required: [caseId, status, urgency, modelVersion]
+      properties:
+        caseId: {type: string}
+        status: {type: string, enum: [RULES_ONLY, AI_PROPOSED, UNDER_REVIEW, CONFIRMED, OVERRIDDEN, UNREVIEWED_TIMEOUT, FINAL]}
+        urgency: {$ref: '#/components/schemas/Urgency'}
+        rulesFloor: {$ref: '#/components/schemas/Urgency'}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        contributingFactors: {type: array, items: {type: string}}
+        modelVersion: {type: string}
+        createdAt: {type: string, format: date-time}
+        reviewedBy: {type: string}
+        reviewReason: {type: string}
+    ReviewDecision:
+      type: object
+      required: [decision, finalUrgency]
+      properties:
+        decision: {type: string, enum: [CONFIRM, OVERRIDE]}
+        finalUrgency: {$ref: '#/components/schemas/Urgency'}
+        reason: {type: string, description: 'Mandatory when decision is OVERRIDE'}
+    AnonymizeRequest:
+      type: object
+      required: [payload]
+      properties:
+        payload: {type: object, additionalProperties: true}
+    AnonymizeResponse:
+      type: object
+      properties:
+        maskedPayload: {type: object, additionalProperties: true}
+        redactions:
+          type: array
+          items:
+            type: object
+            properties:
+              field: {type: string}
+              entityType: {type: string, example: NATIONAL_ID}
+              action: {type: string, enum: [REMOVED, TOKENISED, GENERALISED]}
+        tokenMapId: {type: string, description: 'reference to the pseudonym vault entry, never returned to the model'}
+    ModelInfo:
+      type: object
+      properties:
+        modelVersion: {type: string}
+        trainedOn: {type: string}
+        validation: {type: object, additionalProperties: {type: number}}
+        modelCardUrl: {type: string, format: uri}
+        mode: {type: string, enum: [SHADOW, ACTIVE, DISABLED]}
