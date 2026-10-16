@@ -1,0 +1,109 @@
+{
+  "realm": "irembo-mock",
+  "displayName": "IremboAccount (stand-in: Keycloak)",
+  "displayNameHtml": "<b>IremboAccount</b> <small>(labelled stand-in: Keycloak, synthetic users only)</small>",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "roles": {
+    "realm": [
+      { "name": "patient", "description": "Citizen using TeleClinic" },
+      { "name": "clinician", "description": "Clinician reviewing triage and running consultations" },
+      { "name": "clerk", "description": "Identity reviewer for the patient-matching queue" },
+      { "name": "admin", "description": "Platform operator" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "${OIDC_CLIENT_ID}",
+      "name": "TeleClinic core (backend for frontend)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${OIDC_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${PUBLIC_BASE_URL}/login/oauth2/code/iremboaccount"],
+      "webOrigins": ["${PUBLIC_BASE_URL}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${PUBLIC_BASE_URL}/*"
+      },
+      "defaultClientScopes": ["basic", "profile", "email", "roles", "web-origins", "acr"],
+      "protocolMappers": [
+        {
+          "name": "realm roles in id token",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "multivalued": "true",
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "patient1",
+      "firstName": "Uwase",
+      "lastName": "Demo",
+      "email": "patient1@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": ["patient"],
+      "credentials": [{ "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }]
+    },
+    {
+      "username": "patient2",
+      "firstName": "Eric",
+      "lastName": "Demo",
+      "email": "patient2@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": ["patient"],
+      "credentials": [{ "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }]
+    },
+    {
+      "username": "clinician1",
+      "firstName": "Dr",
+      "lastName": "Mukamana",
+      "email": "clinician1@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": ["clinician"],
+      "credentials": [{ "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }]
+    },
+    {
+      "username": "clerk1",
+      "firstName": "Habimana",
+      "lastName": "Demo",
+      "email": "clerk1@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": ["clerk"],
+      "credentials": [{ "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }]
+    },
+    {
+      "username": "admin1",
+      "firstName": "Ops",
+      "lastName": "Admin",
+      "email": "admin1@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": ["admin"],
+      "credentials": [{ "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }]
+    }
+  ]
+}

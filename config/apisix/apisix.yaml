@@ -1,0 +1,48 @@
+# Routes for the API gateway. Configuration as code: this file is the only source of routes.
+upstreams:
+  - id: core-pool
+    type: roundrobin
+    pass_host: pass
+    nodes:
+      "haproxy:9100": 1
+
+routes:
+  # Liveness of the gateway itself, used by HAProxy and make doctor
+  - id: gateway-ping
+    uri: /apisix/ping
+    plugins:
+      fault-injection:
+        abort:
+          http_status: 200
+          body: "pong\n"
+    upstream_id: core-pool
+
+  # Never expose the core's actuator through the public edge
+  - id: block-actuator
+    uri: /actuator/*
+    priority: 10
+    plugins:
+      fault-injection:
+        abort:
+          http_status: 404
+          body: "not found\n"
+    upstream_id: core-pool
+
+  # Everything else goes to the core. The gateway creates the correlation id
+  # (or keeps a caller-supplied one, used by the demo's fixed "demo-" prefix).
+  - id: core
+    uri: /*
+    upstream_id: core-pool
+    plugins:
+      request-id:
+        header_name: X-Correlation-Id
+        include_in_response: true
+        algorithm: uuid
+      limit-count:
+        count: 1200
+        time_window: 60
+        key_type: var
+        key: remote_addr
+        rejected_code: 429
+        policy: local
+#END
