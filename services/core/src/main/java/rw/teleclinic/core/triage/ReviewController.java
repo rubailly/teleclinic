@@ -35,7 +35,7 @@ class ReviewController {
 
     @GetMapping("/clinician")
     org.springframework.web.servlet.view.RedirectView page() {
-        return new org.springframework.web.servlet.view.RedirectView("/clinician/index.html");
+        return new org.springframework.web.servlet.view.RedirectView("/clinician/");
     }
 
     @GetMapping("/api/clinician/queue")

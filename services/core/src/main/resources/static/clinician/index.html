@@ -3,24 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TeleClinic clinician queue</title>
+  <meta name="theme-color" content="#0063cf">
+  <title>TeleClinic clinician workspace</title>
+  <link rel="icon" href="/ui/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/ui/tc.css">
   <link rel="stylesheet" href="clinician.css">
 </head>
 <body>
-<header>
-  <div>
-    <h1>TeleClinic: triage queue</h1>
-    <p class="sub">Clinician workspace. Synthetic data only.</p>
-  </div>
-  <div class="who"><span id="who">…</span>
-    <form id="logout" method="post" action="/logout"><input type="hidden" name="_csrf" id="csrf"><button>Sign out</button></form>
+<div class="notice"><b>Prototype.</b> Clinician workspace with synthetic patients. AI suggestions are advisory; the clinician decides.</div>
+<header class="topbar">
+  <div class="wrap wide">
+    <nav class="nav">
+      <a class="wordmark" href="/clinician/index.html"><b>Tele</b><span>Clinic</span><small>Clinician</small></a>
+      <div class="nav-links">
+        <span class="who" id="who">…</span>
+        <form id="logout" method="post" action="/logout"><input type="hidden" name="_csrf" id="csrf">
+          <button><span id="logout-icon"></span><span class="label">Sign out</span></button></form>
+      </div>
+    </nav>
+    <div class="hero compact head">
+      <div><h1>Triage queue</h1><p>Most urgent first. Every case is reviewed by a clinician before any clinical action.</p></div>
+      <div class="stats" id="stats"></div>
+    </div>
   </div>
 </header>
 
-<div id="banner" class="banner" hidden></div>
+<div id="banner" class="rules-banner" hidden></div>
 
-<main>
-  <section class="queue">
+<main class="wrap wide work">
+  <section class="queue card raised">
     <table>
       <thead><tr><th>Urgency</th><th>Patient</th><th>Status</th><th>Rules</th><th>Model</th><th>Review by</th></tr></thead>
       <tbody id="rows"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
@@ -28,53 +39,56 @@
     <p class="muted small" id="updated"></p>
   </section>
 
-  <section class="detail" id="detail" hidden>
-    <h2 id="d-title"></h2>
-    <p class="muted small" id="d-id"></p>
+  <section class="detail card raised" id="detail" hidden>
+    <div class="d-head">
+      <div class="avatar" id="d-avatar"></div>
+      <div><h2 id="d-title"></h2><p class="muted small" id="d-id"></p></div>
+      <span id="d-status" class="d-status"></span>
+    </div>
     <div class="side">
-      <div class="card">
-        <h3>Rules (in-session safety floor)</h3>
-        <p class="big" id="d-rules"></p>
+      <div class="pane">
+        <h4><span id="ico-rules"></span> Rules: in-session safety floor</h4>
+        <div class="big" id="d-rules"></div>
         <p id="d-flags"></p>
         <p class="muted small" id="d-ruleset"></p>
       </div>
-      <div class="card ai">
-        <h3>Model suggestion <span class="tag">AI</span></h3>
-        <p class="big" id="d-model"></p>
+      <div class="pane ai">
+        <h4><span id="ico-ai"></span> Model suggestion <span class="badge ai">AI</span></h4>
+        <div class="big" id="d-model"></div>
         <p id="d-factors"></p>
         <p class="muted small" id="d-modelver"></p>
       </div>
     </div>
     <div class="merged">
-      <span>Proposed urgency (the model can only raise it): </span><b id="d-merged"></b>
-      <span id="d-status" class="status"></span>
+      <span>Proposed urgency <span class="muted small">(the higher of rules and model; the model can only raise it)</span></span>
+      <b id="d-merged"></b>
     </div>
 
-    <div id="actions">
-      <button id="b-open">Open for review</button>
-      <button id="b-confirm" class="primary">Confirm</button>
-      <details id="override">
-        <summary>Override</summary>
-        <label>Final urgency
-          <select id="o-urgency">
+    <div id="actions" class="actions">
+      <button id="b-open" class="btn btn-ghost">Open for review</button>
+      <button id="b-confirm" class="btn btn-primary">Confirm urgency</button>
+      <details id="override" class="override">
+        <summary class="btn btn-light">Override</summary>
+        <div class="field"><label>Final urgency</label>
+          <select id="o-urgency" class="input">
             <option>EMERGENCY</option><option>URGENT</option><option>SEMI_URGENT</option><option>ROUTINE</option>
-          </select>
-        </label>
-        <label>Reason (required)<textarea id="o-reason" rows="2" placeholder="Why you disagree"></textarea></label>
-        <button id="b-override" class="primary">Override and finalise</button>
+          </select></div>
+        <div class="field"><label>Reason (required)</label><textarea id="o-reason" class="input" rows="2" placeholder="Why you disagree"></textarea></div>
+        <button id="b-override" class="btn btn-primary btn-block">Override and finalise</button>
       </details>
     </div>
     <div id="signed" class="signed" hidden></div>
 
     <div class="orders">
-      <button id="b-order">Prescribe (illustrative)</button>
+      <button id="b-order" class="btn btn-ghost"><span id="ico-rx"></span> Prescribe (illustrative)</button>
       <span id="order-result"></span>
     </div>
 
-    <h3>History</h3>
+    <h4 class="h-sub">Case history</h4>
     <ol id="d-history" class="history"></ol>
   </section>
 </main>
+<script src="/ui/icons.js"></script>
 <script src="clinician.js"></script>
 </body>
 </html>
