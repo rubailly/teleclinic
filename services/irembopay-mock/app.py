@@ -77,7 +77,8 @@ async def create_payment(request: Request, idempotency_key: str = Header(...)):
         "channel": body.get("channel", "WEB"),
         "callbackUrl": body["callbackUrl"],
         "returnUrl": body.get("returnUrl"),
-        "checkoutUrl": f"{PUBLIC_URL}/checkout/{pid}",
+        "checkoutUrl": None if body.get("channel") == "MOBILE_MONEY" else f"{PUBLIC_URL}/checkout/{pid}",
+        "msisdn": body.get("msisdn"),
         "createdAt": now_iso(),
         "updatedAt": now_iso(),
     }
@@ -95,6 +96,13 @@ def get_payment(pid: str) -> dict:
     if pid not in payments:
         raise HTTPException(404, "payment not found")
     return payments[pid]
+
+
+@app.get("/v1/mobile-money/pending")
+def pending_pushes(msisdn: str):
+    """Approval prompts waiting on this phone (what the phone simulator shows as the mobile-money pop-up)."""
+    return [public_view(p) for p in payments.values()
+            if p.get("msisdn") == msisdn and p["status"] == "PENDING" and p["channel"] == "MOBILE_MONEY"]
 
 
 @app.get("/v1/payments/{pid}")

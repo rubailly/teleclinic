@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TeleClinic USSD simulator</title>
+  <link rel="stylesheet" href="/static/sim.css">
+</head>
+<body>
+<div class="notice"><b>Simulator.</b> Stands in for the telecom aggregator and a basic phone. The gateway, core and rules behind it are real.</div>
+<header class="top">
+  <div class="bar">
+    <div class="mark"><b>Tele</b>Clinic <span class="pill">USSD</span></div>
+    <label class="who">Phone
+      <select id="msisdn">
+        <option value="+250788000001">+250 788 000 001 · Uwase (guardian of Keza)</option>
+        <option value="+250788000002">+250 788 000 002 · Eric</option>
+        <option value="+250788000099">+250 788 000 099 · not linked</option>
+      </select>
+    </label>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="phone-wrap">
+    <div class="phone">
+      <div class="speaker"></div>
+      <div class="screen">
+        <div class="status"><span>MTN RW</span><span id="clock">12:00</span><span>▮▮▮ 86%</span></div>
+        <div id="sms-banner" class="sms-banner" hidden></div>
+
+        <div id="dialer" class="dialer">
+          <div class="display" id="display">*909*8#</div>
+          <div class="hint">Demo service code. Press the green key to dial.</div>
+          <div class="keypad" id="keypad"></div>
+          <div class="call-row">
+            <button class="del" id="del" aria-label="Delete">⌫</button>
+            <button class="call" id="call" aria-label="Dial">✆</button>
+            <span></span>
+          </div>
+        </div>
+
+        <div id="ussd" class="ussd" hidden>
+          <div class="dialog">
+            <div class="spinner-row" id="running" hidden><span class="spin"></span> Running USSD code…</div>
+            <pre id="ussd-text"></pre>
+            <input id="ussd-input" inputmode="numeric" autocomplete="off" aria-label="Reply">
+            <div class="actions">
+              <button id="ussd-cancel" class="flat">Cancel</button>
+              <button id="ussd-send" class="flat strong">Send</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="momo" class="momo" hidden>
+          <div class="momo-card">
+            <div class="momo-head"><span class="momo-logo">MoMo</span> Mobile Money</div>
+            <p id="momo-text"></p>
+            <input id="momo-pin" type="password" inputmode="numeric" maxlength="5" placeholder="Enter MoMo PIN" aria-label="MoMo PIN">
+            <div class="actions">
+              <button id="momo-reject" class="flat">Reject</button>
+              <button id="momo-ok" class="flat strong">Approve</button>
+            </div>
+            <p class="tiny">Simulated prompt from the IremboPay mock. Any PIN works.</p>
+          </div>
+        </div>
+      </div>
+      <div class="chin"></div>
+    </div>
+  </section>
+
+  <section class="side">
+    <div class="card">
+      <div class="card-head"><h2>Step latency</h2><span class="muted small">gateway time per USSD step · budget 1,500 ms</span></div>
+      <div class="chart" id="chart"><p class="muted small">Dial *909*8# to start.</p></div>
+      <div class="kpis" id="kpis"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Session log</h2><span class="muted small">what the aggregator sent and what the gateway answered</span></div>
+      <table class="log"><thead><tr><th>Time</th><th>Step</th><th>Input</th><th>Reply</th><th>Chars</th><th>ms</th></tr></thead><tbody id="log"></tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>SMS inbox</h2><span class="muted small">sent by the core after the payment is confirmed</span></div>
+      <ul class="sms" id="sms"><li class="muted small">No messages yet.</li></ul>
+    </div>
+  </section>
+</main>
+<script src="/static/sim.js"></script>
+</body>
+</html>
