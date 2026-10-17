@@ -5,6 +5,18 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/teleclinic}
     username: ${DB_USER:teleclinic}
     password: ${DB_PASSWORD:not-set}
+    hikari:
+      # Fail fast during a leader change so the caller retries with the same Idempotency-Key
+      connection-timeout: 5000
+      validation-timeout: 2000
+  data:
+    redis:
+      host: ${VALKEY_HOST:localhost}
+      port: 6379
+      timeout: 2s
+  session:
+    redis:
+      namespace: teleclinic:session
   flyway:
     # One schema per module; modules own their tables (ADR-001)
     schemas: patient_index,consent,consultation,payments

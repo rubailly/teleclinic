@@ -22,6 +22,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
         "spring.flyway.locations=classpath:db/migration,classpath:db/demo",
         "spring.modulith.events.externalization.enabled=false",
         "teleclinic.payments.webhook-secret=test-webhook-secret",
+        // Plain servlet sessions in tests; the running stack keeps them in Valkey
+        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.session.SessionAutoConfiguration",
         // Tests drive the payment timer themselves
         "teleclinic.consultation.timer-initial-delay=PT1H"
 })
