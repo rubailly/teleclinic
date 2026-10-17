@@ -10,6 +10,9 @@ make up-lite     # build and start; waits until the edge serves the core
 make doctor      # check every health endpoint
 make smoke       # end-to-end login as patient1 through the edge
 make journey     # web journey: consent, triage, co-payment, webhook, queue, Kafka, webhook attacks
+make scenario-kill-db-leader      # kill the Postgres leader under writes
+make scenario-kill-kafka-broker   # stop one Kafka broker
+make scenario-partition           # cut the leader's node off the network, then heal
 make reset       # back to a known state (about 30 s)
 make test        # core unit and module-boundary tests (Java 21 in a container)
 ```
@@ -23,7 +26,9 @@ Requirements: Docker with Compose v2, `make`, `curl`. Nothing else needs to be i
 | TeleClinic core (Spring Boot 3, Java 21, Spring Modulith) | Real |
 | HAProxy edge with blue/green pool and runtime API | Real |
 | Apache APISIX API gateway (correlation id, rate limits, configuration as code) | Real |
-| PostgreSQL 16 (one schema per module), Kafka (KRaft) | Real, single node for now; HA clusters come next |
+| PostgreSQL 16 with Patroni, 3 nodes and a 3-member etcd quorum, behind HAProxy | Real |
+| Kafka (KRaft), 3 brokers, replication factor 3, min ISR 2 | Real |
+| Valkey for shared HTTP sessions | Real, single node (production: three with Sentinel) |
 | **Keycloak** | **Labelled stand-in for IremboAccount** |
 | **irembopay-mock** | **Labelled stand-in for IremboPay and for the national insurance coverage check** |
 
@@ -46,6 +51,22 @@ Later build steps add the remaining components; see `docs/build-plan.md` for the
 - **Insurance.** Coverage is checked before payment; an insured patient (Eric, Mutuelle) pays only the co-payment.
 - **Outbox.** Events are stored in the same transaction as the state change and sent to Kafka after commit, keyed by patient id. Events left unsent by a failure go out again on restart; this was observed during development, not only designed.
 
+## Built so far (step 3): the data tier survives failures
+
+Three "nodes", each running etcd, Patroni/PostgreSQL and a Kafka broker, so a whole node can be killed or cut off.
+Patroni uses quorum commit (a commit waits for one of the two standbys), `failsafe_mode` off and `pg_rewind`.
+HAProxy sends the core to whichever node is leader and cuts sessions to a node that stops being one.
+
+Measured on a 12-core, 16 GB laptop (each scenario is a script you can rerun):
+
+| Scenario | Result |
+| --- | --- |
+| Kill the database leader while writes run every 200 ms | Writes resumed after 21 s; 0 acknowledged writes lost; the old leader rejoined as a replica |
+| Stop one Kafka broker | All partitions kept 2 in-sync replicas; 50 of 50 messages written with `acks=all`, no errors |
+| Cut the leader's node off the network (`docker network disconnect`) | The isolated leader stopped accepting writes after 6 to 7 s; the majority elected a new leader after 18 to 23 s; never two writable leaders; a direct write to the isolated node was refused; identical rows on all nodes after healing |
+
+Not in the demo: a hardware watchdog (none inside Docker), PgBouncer, Valkey Sentinel, and a second site.
+
 ## Demo users (synthetic)
 
 `patient1` (Uwase), `patient2` (Eric), `clinician1` (Dr Mukamana), `clerk1` (Habimana), `admin1`. One demo password for all of them, set in `.env.example`.
@@ -54,7 +75,7 @@ Later build steps add the remaining components; see `docs/build-plan.md` for the
 
 See `docs/URLS.md`.
 
-## Measured (after step 2)
+## Memory (measured after step 2)
 
 | Container | Memory in use | Limit |
 | --- | --- | --- |
@@ -66,4 +87,4 @@ See `docs/URLS.md`.
 | irembopay-mock | 38 MiB | 128 MiB |
 | haproxy | 13 MiB | 128 MiB |
 
-About 1.4 GB in total. `make reset` to a working edge: 35 s on a 12-core, 16 GB laptop.
+About 1.4 GB in total after step 2; the three-node data tier of step 3 adds about 1.5 GB. `make reset` to a working stack: 42 s.
