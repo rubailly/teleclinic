@@ -9,12 +9,14 @@ x-core: &core
     OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
     OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
     SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE}
-    DB_URL: jdbc:postgresql://postgres:5432/teleclinic
+    # Always the current Patroni leader, through pgproxy
+    DB_URL: jdbc:postgresql://pgproxy:5000/teleclinic
     DB_USER: ${DB_USER}
     DB_PASSWORD: ${DB_PASSWORD}
     # The synthetic demo seed (db/demo) is part of the demo stack only
     FLYWAY_LOCATIONS: classpath:db/migration,classpath:db/demo
-    KAFKA_BOOTSTRAP: kafka-1:9092
+    KAFKA_BOOTSTRAP: kafka-1:9092,kafka-2:9092,kafka-3:9092
+    VALKEY_HOST: valkey
     IREMBOPAY_INTERNAL_URL: http://irembopay-mock:8000
     INSURANCE_INTERNAL_URL: http://irembopay-mock:8000
     IREMBOPAY_CALLBACK_URL: http://haproxy:9080/webhooks/irembopay
@@ -24,7 +26,9 @@ x-core: &core
   depends_on:
     keycloak:
       condition: service_healthy
-    postgres:
+    pgproxy:
+      condition: service_healthy
+    valkey:
       condition: service_healthy
     kafka-init:
       condition: service_completed_successfully

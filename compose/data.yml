@@ -1,65 +1,211 @@
-# Data tier, single-node for step 2. Step 3 replaces postgres with Patroni (3 nodes + 3 etcd)
-# and kafka-1 with a 3-broker KRaft cluster; the core only sees the connection strings.
+# Data tier on three "nodes" (Figure 10). Node N is etcd-N + pg-N + kafka-N, so a whole node can be
+# isolated with `scripts/scenarios/partition-node.sh N`. In production the nodes are separate hosts in
+# separate fault domains.
+
+x-etcd: &etcd
+  image: quay.io/coreos/etcd:v3.5.17
+  healthcheck:
+    test: ["CMD", "etcdctl", "endpoint", "health"]
+    interval: 3s
+    timeout: 3s
+    retries: 30
+  mem_limit: 128m
+  restart: unless-stopped
+  networks: [teleclinic]
+
+x-pg: &pg
+  build:
+    context: ./services/patroni
+  image: teleclinic/patroni:16-4.0.3
+  environment: &pg-env
+    PATRONI_SUPERUSER_PASSWORD: ${PG_SUPERUSER_PASSWORD}
+    PATRONI_REPLICATION_PASSWORD: ${PG_REPLICATION_PASSWORD}
+    APP_DB_USER: ${DB_USER}
+    APP_DB_PASSWORD: ${DB_PASSWORD}
+  depends_on:
+    etcd-1: {condition: service_healthy}
+    etcd-2: {condition: service_healthy}
+    etcd-3: {condition: service_healthy}
+  healthcheck:
+    # Healthy when Patroni is running and Postgres is up as leader or streaming replica
+    test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8008/health >/dev/null"]
+    interval: 3s
+    timeout: 3s
+    retries: 60
+    start_period: 10s
+  mem_limit: 384m
+  shm_size: 128m
+  restart: unless-stopped
+  networks: [teleclinic]
+
+x-kafka: &kafka
+  image: apache/kafka:3.8.1
+  environment: &kafka-env
+    CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    KAFKA_PROCESS_ROLES: broker,controller
+    KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+    KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+    KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093
+    # ADR-004: replication factor 3, min ISR 2, no unclean leader election
+    KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+    KAFKA_MIN_INSYNC_REPLICAS: 2
+    KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: "false"
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+    KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    KAFKA_HEAP_OPTS: -Xms256m -Xmx256m
+  healthcheck:
+    test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+    interval: 5s
+    timeout: 10s
+    retries: 40
+    start_period: 15s
+  mem_limit: 640m
+  restart: unless-stopped
+  networks: [teleclinic]
+
 services:
-  postgres:
-    image: postgres:16.4-alpine
+  etcd-1:
+    <<: *etcd
+    # The etcd image is distroless (no shell), so the arguments are listed in full
+    command:
+      - etcd
+      - --name=etcd-1
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd-1:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd-1:2380
+      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=teleclinic-etcd
+    volumes: [etcd1:/etcd-data]
+  etcd-2:
+    <<: *etcd
+    # The etcd image is distroless (no shell), so the arguments are listed in full
+    command:
+      - etcd
+      - --name=etcd-2
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd-2:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd-2:2380
+      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=teleclinic-etcd
+    volumes: [etcd2:/etcd-data]
+  etcd-3:
+    <<: *etcd
+    # The etcd image is distroless (no shell), so the arguments are listed in full
+    command:
+      - etcd
+      - --name=etcd-3
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd-3:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd-3:2380
+      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=teleclinic-etcd
+    volumes: [etcd3:/etcd-data]
+
+  pg-1:
+    <<: *pg
     environment:
-      POSTGRES_DB: teleclinic
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      <<: *pg-env
+      PATRONI_NAME: pg-1
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-1:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-1:5432
+    volumes: [pg1:/var/lib/postgresql/data]
+  pg-2:
+    <<: *pg
+    environment:
+      <<: *pg-env
+      PATRONI_NAME: pg-2
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-2:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-2:5432
+    volumes: [pg2:/var/lib/postgresql/data]
+  pg-3:
+    <<: *pg
+    environment:
+      <<: *pg-env
+      PATRONI_NAME: pg-3
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-3:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-3:5432
+    volumes: [pg3:/var/lib/postgresql/data]
+
+  # Routes the core to the current leader; health and stats for the cockpit on :9405
+  pgproxy:
+    image: haproxy:3.0.5-alpine
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./config/pgproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "9405:7000"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d teleclinic"]
+      # Healthy only when the cluster has a leader the core can write to
+      test: ["CMD-SHELL", "wget -qO- 'http://127.0.0.1:7000/stats;csv' | grep -q '^primary,pg-[0-9],.*,UP,'"]
       interval: 3s
       timeout: 3s
-      retries: 30
-    mem_limit: 256m
+      retries: 20
+    mem_limit: 64m
     restart: unless-stopped
     networks: [teleclinic]
 
   kafka-1:
-    image: apache/kafka:3.8.1
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:9092
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9093
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
-      KAFKA_HEAP_OPTS: -Xms384m -Xmx384m
-    volumes:
-      - kafka1:/var/lib/kafka/data
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
-      interval: 5s
-      timeout: 10s
-      retries: 30
-      start_period: 10s
-    mem_limit: 768m
-    restart: unless-stopped
-    networks: [teleclinic]
+    <<: *kafka
+    environment: {<<: *kafka-env, KAFKA_NODE_ID: 1, KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-1:9092"}
+    volumes: [kafka1:/var/lib/kafka/data]
+  kafka-2:
+    <<: *kafka
+    environment: {<<: *kafka-env, KAFKA_NODE_ID: 2, KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-2:9092"}
+    volumes: [kafka2:/var/lib/kafka/data]
+  kafka-3:
+    <<: *kafka
+    environment: {<<: *kafka-env, KAFKA_NODE_ID: 3, KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-3:9092"}
+    volumes: [kafka3:/var/lib/kafka/data]
 
-  # One-shot: create the topics the core publishes to (keyed by patient or case id for ordering)
+  # One-shot: topics with replication factor 3 and min ISR 2
   kafka-init:
     image: apache/kafka:3.8.1
     depends_on:
-      kafka-1:
-        condition: service_healthy
+      kafka-1: {condition: service_healthy}
+      kafka-2: {condition: service_healthy}
+      kafka-3: {condition: service_healthy}
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
         for t in consultation.paid consultation.expired triage.requested audit.events fhir.outbound; do
-          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka-1:9092 --create --if-not-exists --topic "$$t" --partitions 6 --replication-factor 1
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka-1:9092,kafka-2:9092,kafka-3:9092 --create --if-not-exists \
+            --topic "$$t" --partitions 6 --replication-factor 3 --config min.insync.replicas=2
         done
     restart: "no"
     networks: [teleclinic]
 
+  # Shared HTTP sessions, so any core instance (blue or green) can serve any signed-in user.
+  # Single node in the demo; production runs three with Sentinel (Section 4.6.1).
+  valkey:
+    image: valkey/valkey:8.0.1-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "volatile-lru"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    mem_limit: 96m
+    restart: unless-stopped
+    networks: [teleclinic]
+
 volumes:
-  pgdata:
+  etcd1:
+  etcd2:
+  etcd3:
+  pg1:
+  pg2:
+  pg3:
   kafka1:
+  kafka2:
+  kafka3:

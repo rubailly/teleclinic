@@ -1,0 +1,59 @@
+# Shared Patroni configuration. Per-node values (name, addresses, passwords) come from PATRONI_* variables.
+scope: teleclinic
+
+restapi:
+  listen: 0.0.0.0:8008
+
+etcd3:
+  hosts: etcd-1:2379,etcd-2:2379,etcd-3:2379
+
+bootstrap:
+  dcs:
+    # Leader key TTL and loop timing give failover well under a minute (target: under 60 s)
+    ttl: 20
+    loop_wait: 5
+    retry_timeout: 5
+    maximum_lag_on_failover: 1048576
+    # Off on purpose: an isolated leader that cannot reach etcd must demote itself (split-brain protection)
+    failsafe_mode: false
+    # Quorum commit: a commit waits for ANY 1 of the standbys, so committed data is on two nodes (ADR-007).
+    # Not strict: losing both standbys keeps the leader writable, with a page to on-call.
+    synchronous_mode: quorum
+    synchronous_node_count: 1
+    synchronous_mode_strict: false
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        wal_log_hints: "on"
+        max_wal_senders: 10
+        max_replication_slots: 10
+        wal_keep_size: 256MB
+        password_encryption: scram-sha-256
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+  post_bootstrap: /usr/local/bin/post-bootstrap.sh
+
+postgresql:
+  listen: 0.0.0.0:5432
+  data_dir: /var/lib/postgresql/data/pgdata
+  pgpass: /tmp/pgpass
+  # Replicas clone with an immediate checkpoint; the default spread checkpoint delays a new replica by minutes
+  basebackup:
+    - checkpoint: fast
+  pg_hba:
+    - local all all trust
+    - host replication replicator 0.0.0.0/0 scram-sha-256
+    - host all all 0.0.0.0/0 scram-sha-256
+  authentication:
+    superuser:
+      username: postgres
+    replication:
+      username: replicator
+
+# No hardware or softdog watchdog inside Docker; in production the watchdog resets a hung leader
+watchdog:
+  mode: off
