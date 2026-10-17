@@ -22,6 +22,11 @@ x-core: &core
     IREMBOPAY_CALLBACK_URL: http://haproxy:9080/webhooks/irembopay
     IREMBOPAY_WEBHOOK_SECRET: ${IREMBOPAY_WEBHOOK_SECRET}
     PAYMENT_WINDOW: ${PAYMENT_WINDOW}
+    MODEL_SERVICE_URL: http://triage-model:8100
+    ANONYMIZER_URL: http://anonymizer:8200
+    VAULT_KEY: ${VAULT_KEY}
+    AI_CALLBACK_SECRET: ${AI_CALLBACK_SECRET}
+    TRIAGE_SLA_SCALE: ${TRIAGE_SLA_SCALE}
     JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
   depends_on:
     keycloak:
@@ -40,7 +45,7 @@ x-core: &core
     start_period: 20s
   mem_limit: 512m
   restart: unless-stopped
-  networks: [teleclinic]
+  networks: [teleclinic, ai-zone]
 
 services:
   irembopay-mock:

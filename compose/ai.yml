@@ -1,0 +1,55 @@
+# AI trust zone (Figure 14). The anonymization gateway is only on the internal "ai-zone" network, which
+# has no route to the internet. The model service also joins the application network to read Kafka and
+# call the core back. The core joins ai-zone to reach the pseudonym vault, which only it may read.
+services:
+  anonymizer:
+    build:
+      context: ./services/anonymizer
+    image: teleclinic/anonymizer:dev
+    environment:
+      VAULT_KEY: ${VAULT_KEY}
+    volumes:
+      - anonvault:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8200/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    mem_limit: 512m
+    restart: unless-stopped
+    networks: [ai-zone]
+
+  triage-model:
+    build:
+      context: ./services/triage-model
+    image: teleclinic/triage-model:dev
+    environment:
+      AI_CALLBACK_SECRET: ${AI_CALLBACK_SECRET}
+      ANONYMIZER_URL: http://anonymizer:8200
+      # The callback goes to the core pool, so it follows blue/green like any other request
+      CORE_CALLBACK_URL: http://haproxy:9100/internal/triage/suggestions
+      KAFKA_BOOTSTRAP: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      MODEL_MODE: ACTIVE
+    volumes:
+      - modelstate:/data
+    depends_on:
+      anonymizer: {condition: service_healthy}
+      kafka-init: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 384m
+    restart: unless-stopped
+    networks: [ai-zone, teleclinic]
+
+networks:
+  ai-zone:
+    name: teleclinic-ai-zone
+    internal: true
+
+volumes:
+  anonvault:
+  modelstate:
