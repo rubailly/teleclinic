@@ -3,6 +3,8 @@
 | What | URL | Notes |
 | --- | --- | --- |
 | Public edge (HAProxy → APISIX → core) | http://localhost:9080 | Sign in at `/login`; `/api/me` shows the session identity |
+| Patient web app | http://localhost:9080/app/ | `/` redirects here; sign in as `patient1` or `patient2` |
+| Clinician queue | http://localhost:9080/clinician/ | Sign in as `clinician1` |
 | Release running behind the edge | http://localhost:9080/api/public/version | `{"version":"v1.4","color":"blue"}` |
 | IremboAccount stand-in (Keycloak) | http://localhost:9180 | Realm `irembo-mock`; admin console at `/admin` |
 | HAProxy stats | http://localhost:9404/stats | Blue/green pool weights and health |

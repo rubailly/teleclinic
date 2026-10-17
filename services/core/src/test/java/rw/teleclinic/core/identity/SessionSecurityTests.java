@@ -29,7 +29,7 @@ class SessionSecurityTests extends IntegrationTest {
 
     @Test
     void browserPageWithoutSessionGoesToLogin() throws Exception {
-        mvc.perform(get("/").accept("text/html")).andExpect(status().is3xxRedirection()).andExpect(redirectedUrlPattern("**/login"));
+        mvc.perform(get("/clinician/index.html").accept("text/html")).andExpect(status().is3xxRedirection()).andExpect(redirectedUrlPattern("**/login"));
     }
 
     @Test

@@ -45,7 +45,7 @@ public class ConsultationService {
                                  Integer durationDays, Boolean pregnant, TriageIntake.Vitals vitals) {
     }
 
-    public record PaymentRequestResult(UUID consultationId, String state, String checkoutUrl, BigDecimal amount,
+    public record PaymentRequestResult(UUID consultationId, String state, String checkoutUrl, BigDecimal fee, BigDecimal amount,
                                        String currency, boolean insured, String coverageScheme, String coverageNote,
                                        Instant payBy) {
     }
@@ -140,7 +140,7 @@ public class ConsultationService {
 
         // If IremboPay is down this throws: nothing is committed and the patient keeps the rules advice
         PaymentService.PaymentIntent intent = payments.start(id, amount, props.currency(),
-                "TeleClinic consultation", props.publicBaseUrl() + "/payment-return?consultation=" + id);
+                "TeleClinic consultation", props.publicBaseUrl() + "/app/#/visit/" + id);
 
         Instant payBy = Instant.now().plus(props.paymentWindow());
         jdbc.sql("""
@@ -151,7 +151,7 @@ public class ConsultationService {
         move(id, ConsultationState.TRIAGED, ConsultationState.PENDING_PAYMENT,
                 "payment " + intent.providerPaymentId() + " created for " + amount + " " + props.currency()
                         + (cover.covered() ? " (" + cover.scheme() + " co-payment)" : ""));
-        return new PaymentRequestResult(id, ConsultationState.PENDING_PAYMENT.name(), intent.checkoutUrl(), amount,
+        return new PaymentRequestResult(id, ConsultationState.PENDING_PAYMENT.name(), intent.checkoutUrl(), props.fee(), amount,
                 props.currency(), cover.covered(), cover.scheme(), cover.note(), payBy);
     }
 
@@ -249,7 +249,7 @@ public class ConsultationService {
     private PaymentRequestResult result(UUID id, ConsultationState state, PaymentService.PaymentIntent intent,
                                         Map<String, Object> c) {
         Timestamp due = (Timestamp) c.get("payment_due_by");
-        return new PaymentRequestResult(id, state.name(), intent.checkoutUrl(), intent.amount(), intent.currency(),
+        return new PaymentRequestResult(id, state.name(), intent.checkoutUrl(), props.fee(), intent.amount(), intent.currency(),
                 c.get("coverage_scheme") != null, (String) c.get("coverage_scheme"), null,
                 due == null ? null : due.toInstant());
     }

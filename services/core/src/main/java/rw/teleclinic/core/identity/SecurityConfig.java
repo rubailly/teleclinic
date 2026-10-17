@@ -76,6 +76,8 @@ class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Webhooks authenticate by signature, not by session (payments module)
                 .requestMatchers("/api/public/**", "/actuator/health/**", "/login", "/error", "/webhooks/**").permitAll()
+                // Static pages and assets; every API they call is still protected
+                .requestMatchers("/", "/app/**", "/ui/**", "/favicon.ico").permitAll()
                 // Signed callbacks from the AI trust zone; blocked at the public edge
                 .requestMatchers("/internal/**").permitAll()
                 .requestMatchers("/api/clinician/**", "/triage/v1/cases/*/review").hasRole("clinician")

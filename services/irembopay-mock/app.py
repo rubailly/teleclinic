@@ -102,23 +102,84 @@ def payment_status(pid: str):
     return public_view(get_payment(pid))
 
 
+CHECKOUT_CSS = """
+@import url("https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@300;400;600;700;800&display=swap");
+*{box-sizing:border-box}body{margin:0;font-family:"Nunito Sans",system-ui,sans-serif;color:#212529;background:#f3f5f6}
+.top{background:linear-gradient(115deg,#0052ad,#0063cf 45%,#1f8bf0);color:#fff;position:relative;overflow:hidden;padding:0 20px}
+.top:after{content:"";position:absolute;width:380px;height:380px;right:-90px;top:-170px;border:44px solid rgba(255,255,255,.07);border-radius:50%}
+.bar{max-width:980px;margin:0 auto;height:64px;display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}
+.mark{font-size:25px;letter-spacing:-.5px;font-weight:300}.mark b{font-weight:800}
+.secure{font-size:13px;font-weight:700;opacity:.9;display:flex;gap:6px;align-items:center}
+.mock{background:#ffc726;color:#3a2600;font-size:13px;font-weight:700;text-align:center;padding:8px}
+.wrap{max-width:980px;margin:26px auto;padding:0 20px;display:grid;grid-template-columns:1fr 1.2fr;gap:20px}
+@media(max-width:760px){.wrap{grid-template-columns:1fr}}
+.card{background:#fff;border-radius:10px;box-shadow:0 2px 12px rgba(16,42,84,.08);padding:22px}
+h2{font-size:17px;color:#34495e;margin:0 0 14px;font-weight:800}.muted{color:#7c91a1}.small{font-size:13px}
+.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e7edf3;font-size:14.5px}.row:last-of-type{border:0}
+.row span:first-child{color:#7c91a1}.row b{font-weight:700}
+.total{margin-top:14px;padding:16px;border-radius:8px;background:#eef5fc;display:flex;justify-content:space-between;align-items:center}
+.total .amt{font-size:30px;font-weight:800;letter-spacing:-.5px}.total .amt small{font-size:15px;color:#7c91a1}
+.merchant{display:flex;gap:12px;align-items:center;margin-bottom:16px}
+.logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#1f8bf0,#0052ad);display:grid;place-items:center;color:#fff;font-weight:800}
+.method{display:flex;align-items:center;gap:14px;border:1px solid #cfdae5;border-radius:8px;padding:13px 14px;margin-bottom:10px;cursor:pointer}
+.method input{accent-color:#0063cf;width:18px;height:18px}.method.on{border-color:#0063cf;box-shadow:0 0 0 3px #e0edf9}
+.pill{font-size:12px;font-weight:800;color:#fff;border-radius:6px;padding:5px 8px;min-width:58px;text-align:center}
+.mtn{background:#ffcb05;color:#1b1b1b}.airtel{background:#e40000}.card-pill{background:#34495e}
+label.f{display:block;font-weight:700;font-size:14px;color:#34495e;margin:14px 0 6px}
+.in{width:100%;height:46px;border:1px solid #cfdae5;border-radius:5px;padding:0 12px;font:15px "Nunito Sans",system-ui}
+.btn{width:100%;height:50px;border:0;border-radius:5px;font:700 16px "Nunito Sans",system-ui;cursor:pointer;margin-top:16px;color:#fff;
+background:linear-gradient(100deg,#1f8bf0,#0063cf);box-shadow:0 2px 8px rgba(0,99,207,.25)}
+.link{background:none;border:0;color:#7c91a1;font:600 14px "Nunito Sans",system-ui;cursor:pointer;width:100%;margin-top:10px}
+.state{text-align:center;padding:26px 10px}.ring{width:64px;height:64px;border-radius:50%;margin:0 auto 14px;display:grid;place-items:center;font-size:30px}
+.ok{background:#e3f5ee;color:#0f996d}.no{background:#fdecee;color:#dc3545}.wait{background:#e0edf9;color:#0063cf}
+.spin{width:28px;height:28px;border:4px solid #e0edf9;border-top-color:#0063cf;border-radius:50%;animation:s .8s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+"""
+
+
 @app.get("/checkout/{pid}", response_class=HTMLResponse)
 def checkout(pid: str):
     p = get_payment(pid)
-    done = p["status"] != "PENDING"
-    buttons = "" if done else f"""
-      <form method="post" action="/checkout/{pid}/approve"><button class="ok">Approve payment</button></form>
-      <form method="post" action="/checkout/{pid}/decline"><button class="no">Decline</button></form>"""
-    return f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>IremboPay (mock) checkout</title>
-<style>body{{font-family:sans-serif;max-width:26rem;margin:2rem auto;padding:0 1rem}}
-.banner{{background:#fff4d6;border:1px solid #e0b100;padding:.5rem;border-radius:6px;font-size:.9rem}}
-button{{width:100%;padding:.8rem;margin:.4rem 0;font-size:1rem;border-radius:6px;border:0;cursor:pointer}}
-.ok{{background:#0b5cc0;color:#fff}}.no{{background:#eee}}</style></head><body>
-<p class="banner">MOCK: labelled stand-in for IremboPay. No real money moves.</p>
-<h1>Pay {escape(str(p['amount']))} {escape(p['currency'])}</h1>
-<p>{escape(p['description'] or 'TeleClinic consultation')}<br><small>Reference {escape(p['reference'])}</small></p>
-<p>Status: <b>{escape(p['status'])}</b></p>{buttons}</body></html>"""
+    amount = f"{int(float(p['amount'])):,}"
+    summary = f"""
+      <div class="card"><div class="merchant"><div class="logo">TC</div><div><b>TeleClinic</b><div class="muted small">Ministry of Health service on IremboHub</div></div></div>
+        <h2>Order summary</h2>
+        <div class="row"><span>Service</span><b>{escape(p['description'] or 'TeleClinic consultation')}</b></div>
+        <div class="row"><span>Reference</span><b>{escape(p['reference'][:8])}</b></div>
+        <div class="row"><span>Payment ID</span><b>{escape(p['paymentId'])}</b></div>
+        <div class="total"><span class="muted">Amount to pay</span><span class="amt">{amount} <small>{escape(p['currency'])}</small></span></div>
+      </div>"""
+    if p["status"] == "PENDING":
+        right = f"""
+      <div class="card" id="pay"><h2>Choose how to pay</h2>
+        <label class="method on"><input type="radio" name="m" value="mtn" checked><span class="pill mtn">MoMo</span><div><b>MTN Mobile Money</b><div class="muted small">Approve the prompt on your phone</div></div></label>
+        <label class="method"><input type="radio" name="m" value="airtel"><span class="pill airtel">airtel</span><div><b>Airtel Money</b><div class="muted small">Approve the prompt on your phone</div></div></label>
+        <label class="method"><input type="radio" name="m" value="card"><span class="pill card-pill">CARD</span><div><b>Bank card</b><div class="muted small">Visa or Mastercard</div></div></label>
+        <label class="f" for="msisdn">Mobile money number</label><input class="in" id="msisdn" value="078 800 0002" inputmode="tel">
+        <form method="post" action="/checkout/{pid}/approve" id="approve"></form>
+        <button class="btn" id="go">Pay {amount} {escape(p['currency'])}</button>
+        <form method="post" action="/checkout/{pid}/decline"><button class="link">Cancel payment</button></form>
+      </div>
+      <div class="card state" id="prompt" hidden><div class="ring wait"><div class="spin"></div></div>
+        <h2>Approve the payment on your phone</h2><p class="muted">A prompt was sent to <b id="num"></b>. Enter your PIN to confirm.</p>
+        <p class="muted small">Mock: the prompt is approved automatically in a moment.</p></div>"""
+        script = """<script>
+document.querySelectorAll('.method').forEach(m=>m.onclick=()=>{document.querySelectorAll('.method').forEach(x=>x.classList.remove('on'));m.classList.add('on');m.querySelector('input').checked=true;});
+document.getElementById('go').onclick=()=>{document.getElementById('pay').hidden=true;document.getElementById('prompt').hidden=false;
+document.getElementById('num').textContent=document.getElementById('msisdn').value;setTimeout(()=>document.getElementById('approve').submit(),2200);};
+</script>"""
+    else:
+        good = p["status"] == "SUCCEEDED"
+        right = f"""
+      <div class="card state"><div class="ring {'ok' if good else 'no'}">{'&#10003;' if good else '&#10007;'}</div>
+        <h2>{'Payment received' if good else 'Payment not completed'}</h2>
+        <p class="muted">{'TeleClinic has been notified.' if good else 'No money was taken.'}</p></div>"""
+        script = ""
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IremboPay (mock) checkout</title><style>{CHECKOUT_CSS}</style></head><body>
+<div class="mock">MOCK: labelled stand-in for IremboPay. No real money moves.</div>
+<div class="top"><div class="bar"><div class="mark"><b>irembo</b>Pay</div><div class="secure">&#128274; Secure checkout</div></div></div>
+<div class="wrap">{summary}{right}</div>{script}</body></html>"""
 
 
 async def settle(pid: str, status: str):
