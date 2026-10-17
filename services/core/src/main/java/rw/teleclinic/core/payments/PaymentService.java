@@ -74,6 +74,25 @@ public class PaymentService {
         return findByConsultation(consultationId).orElseThrow();
     }
 
+    /** Same as {@link #start} but paid by a mobile-money push to the given phone (USSD and voice channels). */
+    @Transactional
+    public PaymentIntent startMobileMoney(UUID consultationId, BigDecimal amount, String currency, String description,
+                                          String msisdn) {
+        Optional<PaymentIntent> existing = findByConsultation(consultationId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        IremboPayClient.ProviderPayment p = irembopay.createMobileMoney(consultationId.toString(), amount, currency,
+                consultationId.toString(), description, msisdn);
+        jdbc.sql("""
+                        INSERT INTO payments.payment (id, consultation_id, provider_payment_id, amount, currency, status, checkout_url)
+                        VALUES (?, ?, ?, ?, ?, ?, NULL)
+                        ON CONFLICT (consultation_id) DO NOTHING""")
+                .params(UUID.randomUUID(), consultationId, p.paymentId(), amount, currency, p.status())
+                .update();
+        return findByConsultation(consultationId).orElseThrow();
+    }
+
     @Transactional(readOnly = true)
     public Optional<PaymentIntent> findByConsultation(UUID consultationId) {
         return jdbc.sql("SELECT * FROM payments.payment WHERE consultation_id = ?").param(consultationId)

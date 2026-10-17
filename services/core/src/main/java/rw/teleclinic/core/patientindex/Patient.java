@@ -13,7 +13,8 @@ public record Patient(
         String givenName,
         String familyName,
         LocalDate birthDate,
-        String sex) {
+        String sex,
+        String phone) {
 
     /** Age band used for triage and the model, so the date of birth never leaves the core (data minimisation). */
     public String ageBand(LocalDate today) {

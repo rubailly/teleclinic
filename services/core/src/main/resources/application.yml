@@ -19,7 +19,7 @@ spring:
       namespace: teleclinic:session
   flyway:
     # One schema per module; modules own their tables (ADR-001)
-    schemas: patient_index,consent,consultation,payments,triage
+    schemas: patient_index,consent,consultation,payments,triage,identity
     default-schema: public
     locations: ${FLYWAY_LOCATIONS:classpath:db/migration}
   kafka:
@@ -101,6 +101,13 @@ teleclinic:
     callback-tolerance: 5m
     # Review deadlines are multiplied by this; the demo uses a small value to show the timeout
     sla-scale: ${TRIAGE_SLA_SCALE:1.0}
+  channels:
+    # Shared with the USSD gateway (internal network only; production uses mTLS)
+    gateway-key: ${USSD_GATEWAY_KEY:not-set}
+  notifications:
+    # The telecom aggregator's SMS API; in the demo the USSD gateway stands in for it
+    sms-url: ${SMS_URL:http://localhost:8300}
+    sms-key: ${USSD_GATEWAY_KEY:not-set}
   insurance:
     # National insurance coverage check (CBHI/Mutuelle, RSSB). A labelled mock in the demo (assumption A12).
     base-url: ${INSURANCE_INTERNAL_URL:http://localhost:8000}

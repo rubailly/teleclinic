@@ -15,11 +15,11 @@ public final class ConsultationEvents {
     }
 
     @Externalized("consultation.paid::#{#this.patientId()}")
-    public record ConsultationPaid(UUID consultationId, UUID patientId, String channel, String urgency,
+    public record ConsultationPaid(UUID consultationId, UUID patientId, String bookedBySubject, String channel, String urgency,
                                    String amount, String currency, Instant paidAt) {
     }
 
     @Externalized("consultation.expired::#{#this.patientId()}")
-    public record ConsultationExpired(UUID consultationId, UUID patientId, Instant expiredAt) {
+    public record ConsultationExpired(UUID consultationId, UUID patientId, String bookedBySubject, Instant expiredAt) {
     }
 }

@@ -31,7 +31,8 @@ public class PatientDirectory {
             rs.getString("given_name"),
             rs.getString("family_name"),
             rs.getObject("birth_date", LocalDate.class),
-            rs.getString("sex"));
+            rs.getString("sex"),
+            rs.getString("phone"));
 
     private final JdbcClient jdbc;
 

@@ -125,6 +125,12 @@ public class ConsultationService {
     /** Step 2: coverage check, payment created at IremboPay, consultation PENDING_PAYMENT with a timer. */
     @Transactional
     public PaymentRequestResult requestPayment(String subject, UUID id) {
+        return requestPayment(subject, id, null);
+    }
+
+    /** With a phone number, IremboPay pushes a mobile-money prompt instead of returning a checkout page. */
+    @Transactional
+    public PaymentRequestResult requestPayment(String subject, UUID id, String mobileMoneyMsisdn) {
         Map<String, Object> c = lockForBooker(id, subject);
         ConsultationState state = ConsultationState.valueOf((String) c.get("state"));
         if (state == ConsultationState.PENDING_PAYMENT) {
@@ -139,8 +145,10 @@ public class ConsultationService {
         BigDecimal amount = cover.covered() ? cover.copayment() : props.fee();
 
         // If IremboPay is down this throws: nothing is committed and the patient keeps the rules advice
-        PaymentService.PaymentIntent intent = payments.start(id, amount, props.currency(),
-                "TeleClinic consultation", props.publicBaseUrl() + "/app/#/visit/" + id);
+        PaymentService.PaymentIntent intent = mobileMoneyMsisdn != null
+                ? payments.startMobileMoney(id, amount, props.currency(), "TeleClinic consultation", mobileMoneyMsisdn)
+                : payments.start(id, amount, props.currency(), "TeleClinic consultation",
+                        props.publicBaseUrl() + "/app/#/visit/" + id);
 
         Instant payBy = Instant.now().plus(props.paymentWindow());
         jdbc.sql("""
@@ -170,7 +178,7 @@ public class ConsultationService {
                 move(id, state, ConsultationState.PAID, "confirmed by IremboPay (" + confirmed.confirmedBy() + ")");
                 move(id, ConsultationState.PAID, ConsultationState.QUEUED, "entered the clinician queue as " + c.get("urgency"));
                 triage.markQueued(id);
-                events.publishEvent(new ConsultationPaid(id, (UUID) c.get("patient_id"), (String) c.get("channel"),
+                events.publishEvent(new ConsultationPaid(id, (UUID) c.get("patient_id"), (String) c.get("booked_by_subject"), (String) c.get("channel"),
                         (String) c.get("urgency"), confirmed.amount().toPlainString(), confirmed.currency(), Instant.now()));
             }
             // Money arrived after the slot was released: compensate with a refund, never silently keep it
@@ -196,7 +204,7 @@ public class ConsultationService {
         }
         move(id, ConsultationState.PENDING_PAYMENT, ConsultationState.EXPIRED,
                 "no payment within " + props.paymentWindow().toMinutes() + " min; slot released");
-        events.publishEvent(new ConsultationExpired(id, (UUID) c.get().get("patient_id"), Instant.now()));
+        events.publishEvent(new ConsultationExpired(id, (UUID) c.get().get("patient_id"), (String) c.get().get("booked_by_subject"), Instant.now()));
     }
 
     @Transactional(readOnly = true)

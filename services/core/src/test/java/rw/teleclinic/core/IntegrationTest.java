@@ -30,7 +30,10 @@ import org.testcontainers.containers.PostgreSQLContainer;
         "teleclinic.triage.vault-key=test-vault-key",
         // Nothing listens here: the model service counts as unreachable unless a test stubs it
         "teleclinic.triage.model-service-url=http://127.0.0.1:1",
-        "teleclinic.triage.anonymizer-url=http://127.0.0.1:1"
+        "teleclinic.triage.anonymizer-url=http://127.0.0.1:1",
+        "teleclinic.channels.gateway-key=test-gateway-key",
+        "teleclinic.notifications.sms-url=http://127.0.0.1:1",
+        "teleclinic.notifications.sms-key=test-gateway-key"
 })
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {

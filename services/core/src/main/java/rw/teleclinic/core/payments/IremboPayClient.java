@@ -50,6 +50,21 @@ class IremboPayClient {
         }
     }
 
+    /** Mobile-money push: IremboPay sends an approval prompt to the payer's phone; no checkout page. */
+    ProviderPayment createMobileMoney(String idempotencyKey, BigDecimal amount, String currency, String reference,
+                                      String description, String msisdn) {
+        Map<String, Object> body = request(amount, currency, reference, description, null);
+        body.put("channel", "MOBILE_MONEY");
+        body.put("msisdn", msisdn);
+        try {
+            return http.post().uri("/v1/payments").header("Idempotency-Key", idempotencyKey).body(body)
+                    .retrieve().body(ProviderPayment.class);
+        } catch (RestClientException e) {
+            throw ApiException.unavailable("payment-unavailable",
+                    "IremboPay is not reachable right now; nothing was charged. Please try again in a moment.");
+        }
+    }
+
     private Map<String, Object> request(BigDecimal amount, String currency, String reference, String description,
                                         String returnUrl) {
         Map<String, Object> body = new HashMap<>();
