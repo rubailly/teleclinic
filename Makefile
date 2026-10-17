@@ -8,7 +8,7 @@ MAVEN := docker run --rm -v "$(CURDIR)/services/core":/w -v teleclinic-m2:/root/
 	-v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
 	--add-host=host.docker.internal:host-gateway maven:3.9.9-eclipse-temurin-21 mvn -B -q $(MVN_NET)
 
-.PHONY: help up-lite down reset doctor test smoke journey logs ps release-up
+.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition logs ps release-up
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -25,7 +25,8 @@ down: .env ## Stop everything (keeps volumes)
 	$(COMPOSE) --profile release down
 
 reset: .env ## Back to a known state: remove containers and volumes, start again
-	$(COMPOSE) --profile release down -v --remove-orphans
+	@# Data is thrown away, so there is no point waiting for graceful shutdowns
+	$(COMPOSE) --profile release down -v -t 1 --remove-orphans
 	$(MAKE) up-lite
 
 doctor: .env ## Check every health endpoint
@@ -39,6 +40,15 @@ smoke: .env ## End-to-end login through the edge as patient1 (BFF, no token in t
 
 journey: .env ## End-to-end web journey: consent, triage, co-payment, webhook, queue, Kafka, webhook attacks
 	./scripts/smoke/journey.sh
+
+scenario-kill-db-leader: .env ## Scene 4a: kill the Postgres leader under writes; measure failover, check no loss
+	./scripts/scenarios/kill-db-leader.sh
+
+scenario-kill-kafka-broker: .env ## Scene 4a: stop one Kafka broker; producers keep writing with acks=all
+	./scripts/scenarios/kill-kafka-broker.sh
+
+scenario-partition: .env ## Scene 4b: isolate the leader's node; minority demotes, majority continues, heal
+	./scripts/scenarios/partition-node.sh
 
 logs: .env ## Follow logs of all services
 	$(COMPOSE) logs -f --tail=100
