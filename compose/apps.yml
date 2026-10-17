@@ -26,6 +26,8 @@ x-core: &core
     ANONYMIZER_URL: http://anonymizer:8200
     VAULT_KEY: ${VAULT_KEY}
     AI_CALLBACK_SECRET: ${AI_CALLBACK_SECRET}
+    USSD_GATEWAY_KEY: ${USSD_GATEWAY_KEY}
+    SMS_URL: http://ussd-gateway:8300
     TRIAGE_SLA_SCALE: ${TRIAGE_SLA_SCALE}
     JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
   depends_on:
@@ -59,6 +61,29 @@ services:
       - "9280:8000"   # hosted checkout page the browser is sent to
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 128m
+    restart: unless-stopped
+    networks: [teleclinic]
+
+  ussd-gateway:
+    build:
+      context: ./services/ussd-gateway
+    image: teleclinic/ussd-gateway:dev
+    environment:
+      CORE_URL: http://haproxy:9100
+      USSD_GATEWAY_KEY: ${USSD_GATEWAY_KEY}
+      IREMBOPAY_URL: http://irembopay-mock:8000
+      VALKEY_HOST: valkey
+    ports:
+      - "9380:8300"   # aggregator callback and the phone simulator
+    depends_on:
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8300/health')"]
       interval: 5s
       timeout: 3s
       retries: 20

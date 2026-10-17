@@ -21,6 +21,7 @@ check "edge -> core: public ping"     curl -fsS --max-time 3 "$PUBLIC_BASE_URL/a
 check "edge -> core: release"         curl -fsS --max-time 3 "$PUBLIC_BASE_URL/api/public/version"
 check "edge: actuator not exposed"    bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 $PUBLIC_BASE_URL/actuator/health)\" = 404 ] && echo 404"
 check "IremboAccount stand-in (OIDC)" bash -c "curl -fsS --max-time 3 $KEYCLOAK_PUBLIC_URL/realms/$OIDC_REALM/.well-known/openid-configuration | grep -o '\"issuer\":\"[^\"]*\"'"
+check "USSD gateway"                  curl -fsS --max-time 3 http://localhost:9380/health
 haproxy_pool() { curl -fsS --max-time 3 "http://localhost:9404/stats;csv" | awk -F, '$1=="core" && $2!="BACKEND" {printf "%s=%s(w%s) ", $2, $18, $19}'; }
 check "HAProxy blue/green pool"       haproxy_pool
 

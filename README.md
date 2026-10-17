@@ -13,6 +13,7 @@ make journey     # web journey: consent, triage, co-payment, webhook, queue, Kaf
 make scenario-kill-db-leader      # kill the Postgres leader under writes
 make scenario-kill-kafka-broker   # stop one Kafka broker
 make scenario-partition           # cut the leader's node off the network, then heal
+make ussd        # book for a child from a basic phone, pay by mobile money, get an SMS
 make clinician   # AI-proposed case, orders gated, clinician override, kill switch, no identifiers in AI logs
 make reset       # back to a known state (about 30 s)
 make test        # core unit and module-boundary tests (Java 21 in a container)
@@ -34,6 +35,8 @@ Requirements: Docker with Compose v2, `make`, `curl`. Nothing else needs to be i
 | Triage model (logistic regression on ONNX Runtime) | Real, but **trained on synthetic data with illustrative labels** |
 | **Keycloak** | **Labelled stand-in for IremboAccount** |
 | **irembopay-mock** | **Labelled stand-in for IremboPay and for the national insurance coverage check** |
+| USSD gateway (menus, sessions in Valkey, one page per step) | Real |
+| **Phone simulator** | **Labelled stand-in for the telecom aggregator, a basic phone, its mobile-money prompt and SMS** |
 
 Later build steps add the remaining components; see `docs/build-plan.md` for the order and `docs/DEMO_STORY.md` for what each one must show.
 
@@ -90,6 +93,14 @@ Measured (synthetic data; numbers describe the demo model, not clinical performa
 | Model restart | a new case is handled about 4 s after the restart (the old instance leaves its consumer group cleanly) |
 | Escalation example | fever, headache and rash: rules SEMI_URGENT, model URGENT, proposed URGENT |
 | AI zone logs after a full run | 0 identifier matches; the anonymizer has no route to the internet |
+
+## Built so far: the USSD channel
+
+- **Phone simulator** at http://localhost:9380 (labelled). Dial `*909*8#`, pick Kinyarwanda or English, enter the PIN (`1234` for the two demo numbers), choose who is sick, consent, pick symptoms one at a time, and get the rules advice in the same session. Booking ends the session with a mobile-money prompt; once IremboPay confirms, the core sends an SMS.
+- **Same core, same rules.** The gateway is stateless (sessions in Valkey, 180 s) and calls the core on internal routes the public edge refuses. A phone number is linked to an IremboAccount subject once; the PIN is stored as a bcrypt hash and three wrong tries lock it for 15 minutes. Each unlock gives a 5-minute channel token.
+- **One page per step.** Every screen fits 182 characters; the smoke test fails if one does not.
+
+Measured on the demo machine (`make ussd`): the slowest gateway step, booking with the rules triage, took 176 ms; unlocking with the PIN 96 to 158 ms; menu steps under 5 ms. The budget per step is 1,500 ms. The longest page is 130 characters.
 
 ## Demo users (synthetic)
 
