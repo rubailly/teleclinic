@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TeleClinic clinician queue</title>
+  <link rel="stylesheet" href="clinician.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>TeleClinic: triage queue</h1>
+    <p class="sub">Clinician workspace. Synthetic data only.</p>
+  </div>
+  <div class="who"><span id="who">…</span>
+    <form id="logout" method="post" action="/logout"><input type="hidden" name="_csrf" id="csrf"><button>Sign out</button></form>
+  </div>
+</header>
+
+<div id="banner" class="banner" hidden></div>
+
+<main>
+  <section class="queue">
+    <table>
+      <thead><tr><th>Urgency</th><th>Patient</th><th>Status</th><th>Rules</th><th>Model</th><th>Review by</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+    </table>
+    <p class="muted small" id="updated"></p>
+  </section>
+
+  <section class="detail" id="detail" hidden>
+    <h2 id="d-title"></h2>
+    <p class="muted small" id="d-id"></p>
+    <div class="side">
+      <div class="card">
+        <h3>Rules (in-session safety floor)</h3>
+        <p class="big" id="d-rules"></p>
+        <p id="d-flags"></p>
+        <p class="muted small" id="d-ruleset"></p>
+      </div>
+      <div class="card ai">
+        <h3>Model suggestion <span class="tag">AI</span></h3>
+        <p class="big" id="d-model"></p>
+        <p id="d-factors"></p>
+        <p class="muted small" id="d-modelver"></p>
+      </div>
+    </div>
+    <div class="merged">
+      <span>Proposed urgency (the model can only raise it): </span><b id="d-merged"></b>
+      <span id="d-status" class="status"></span>
+    </div>
+
+    <div id="actions">
+      <button id="b-open">Open for review</button>
+      <button id="b-confirm" class="primary">Confirm</button>
+      <details id="override">
+        <summary>Override</summary>
+        <label>Final urgency
+          <select id="o-urgency">
+            <option>EMERGENCY</option><option>URGENT</option><option>SEMI_URGENT</option><option>ROUTINE</option>
+          </select>
+        </label>
+        <label>Reason (required)<textarea id="o-reason" rows="2" placeholder="Why you disagree"></textarea></label>
+        <button id="b-override" class="primary">Override and finalise</button>
+      </details>
+    </div>
+    <div id="signed" class="signed" hidden></div>
+
+    <div class="orders">
+      <button id="b-order">Prescribe (illustrative)</button>
+      <span id="order-result"></span>
+    </div>
+
+    <h3>History</h3>
+    <ol id="d-history" class="history"></ol>
+  </section>
+</main>
+<script src="clinician.js"></script>
+</body>
+</html>

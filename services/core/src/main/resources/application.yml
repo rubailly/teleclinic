@@ -19,7 +19,7 @@ spring:
       namespace: teleclinic:session
   flyway:
     # One schema per module; modules own their tables (ADR-001)
-    schemas: patient_index,consent,consultation,payments
+    schemas: patient_index,consent,consultation,payments,triage
     default-schema: public
     locations: ${FLYWAY_LOCATIONS:classpath:db/migration}
   kafka:
@@ -93,6 +93,14 @@ teleclinic:
     payment-window: ${PAYMENT_WINDOW:10m}
     timer-interval: PT15S   # ISO-8601: @Scheduled does not accept "15s"
     public-base-url: ${PUBLIC_BASE_URL:http://localhost:9080}
+  triage:
+    model-service-url: ${MODEL_SERVICE_URL:http://localhost:8100}
+    anonymizer-url: ${ANONYMIZER_URL:http://localhost:8200}
+    vault-key: ${VAULT_KEY:not-set}
+    callback-secret: ${AI_CALLBACK_SECRET:not-set}
+    callback-tolerance: 5m
+    # Review deadlines are multiplied by this; the demo uses a small value to show the timeout
+    sla-scale: ${TRIAGE_SLA_SCALE:1.0}
   insurance:
     # National insurance coverage check (CBHI/Mutuelle, RSSB). A labelled mock in the demo (assumption A12).
     base-url: ${INSURANCE_INTERNAL_URL:http://localhost:8000}

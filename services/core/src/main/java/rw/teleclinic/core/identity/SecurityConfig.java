@@ -76,6 +76,10 @@ class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Webhooks authenticate by signature, not by session (payments module)
                 .requestMatchers("/api/public/**", "/actuator/health/**", "/login", "/error", "/webhooks/**").permitAll()
+                // Signed callbacks from the AI trust zone; blocked at the public edge
+                .requestMatchers("/internal/**").permitAll()
+                .requestMatchers("/api/clinician/**", "/triage/v1/cases/*/review").hasRole("clinician")
+                .requestMatchers("/triage/v1/models/kill-switch", "/triage/v1/models/activate").hasRole("admin")
                 .anyRequest().authenticated())
             .oauth2Login(login -> login
                 .loginPage("/login")
@@ -86,7 +90,7 @@ class SecurityConfig {
             .csrf(csrf -> csrf
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 .csrfTokenRequestHandler(eagerCsrfToken())
-                .ignoringRequestMatchers("/webhooks/**"))
+                .ignoringRequestMatchers("/webhooks/**", "/internal/**"))
             // APIs answer 401 instead of redirecting, so the apps can start the login themselves
             .exceptionHandling(e -> e.defaultAuthenticationEntryPointFor(
                     new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), new AntPathRequestMatcher("/api/**")));

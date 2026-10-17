@@ -25,7 +25,12 @@ import org.testcontainers.containers.PostgreSQLContainer;
         // Plain servlet sessions in tests; the running stack keeps them in Valkey
         "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.session.SessionAutoConfiguration",
         // Tests drive the payment timer themselves
-        "teleclinic.consultation.timer-initial-delay=PT1H"
+        "teleclinic.consultation.timer-initial-delay=PT1H",
+        "teleclinic.triage.callback-secret=test-callback-secret",
+        "teleclinic.triage.vault-key=test-vault-key",
+        // Nothing listens here: the model service counts as unreachable unless a test stubs it
+        "teleclinic.triage.model-service-url=http://127.0.0.1:1",
+        "teleclinic.triage.anonymizer-url=http://127.0.0.1:1"
 })
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {

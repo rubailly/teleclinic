@@ -32,7 +32,7 @@ import rw.teleclinic.core.shared.ApiException;
 import rw.teleclinic.core.triage.RuleResult;
 import rw.teleclinic.core.triage.RulesEngine;
 import rw.teleclinic.core.triage.TriageIntake;
-import rw.teleclinic.core.triage.TriageRequested;
+import rw.teleclinic.core.triage.TriageCases;
 
 /**
  * The booking and payment saga, orchestrated in one place (ADR-005). No two-phase commit with IremboPay
@@ -58,12 +58,13 @@ public class ConsultationService {
     private final RulesEngine rules;
     private final PaymentService payments;
     private final CoverageService coverage;
+    private final TriageCases triage;
     private final ApplicationEventPublisher events;
     private final ObjectMapper json;
     private final ConsultationProperties props;
 
     ConsultationService(JdbcClient jdbc, PatientDirectory patients, ConsentService consents, RulesEngine rules,
-                        PaymentService payments, CoverageService coverage, ApplicationEventPublisher events,
+                        PaymentService payments, CoverageService coverage, TriageCases triage, ApplicationEventPublisher events,
                         ObjectMapper json, ConsultationProperties props) {
         this.jdbc = jdbc;
         this.patients = patients;
@@ -71,6 +72,7 @@ public class ConsultationService {
         this.rules = rules;
         this.payments = payments;
         this.coverage = coverage;
+        this.triage = triage;
         this.events = events;
         this.json = json;
         this.props = props;
@@ -115,11 +117,8 @@ public class ConsultationService {
         move(id, ConsultationState.DRAFT, ConsultationState.TRIAGED,
                 "rules " + result.rulesetVersion() + ": " + result.urgency() + " " + result.redFlags());
 
-        if (consent.purposes().contains("AI_TRIAGE_SUPPORT")) {
-            events.publishEvent(new TriageRequested(id, channel, intake.ageBand(), intake.sex(),
-                    Boolean.TRUE.equals(req.pregnant()), req.symptoms(), req.durationDays(), req.vitals(),
-                    result.urgency(), result.rulesetVersion()));
-        }
+        // Rules are the safety floor; the model is asked asynchronously only if consent covers AI support
+        triage.open(id, req.patientId(), intake, result, consent.purposes().contains("AI_TRIAGE_SUPPORT"));
         return view(id);
     }
 
@@ -170,6 +169,7 @@ public class ConsultationService {
             case PENDING_PAYMENT -> {
                 move(id, state, ConsultationState.PAID, "confirmed by IremboPay (" + confirmed.confirmedBy() + ")");
                 move(id, ConsultationState.PAID, ConsultationState.QUEUED, "entered the clinician queue as " + c.get("urgency"));
+                triage.markQueued(id);
                 events.publishEvent(new ConsultationPaid(id, (UUID) c.get("patient_id"), (String) c.get("channel"),
                         (String) c.get("urgency"), confirmed.amount().toPlainString(), confirmed.currency(), Instant.now()));
             }
