@@ -1,4 +1,4 @@
-package rw.teleclinic.core.payments;
+package rw.teleclinic.core.shared;
 
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
@@ -11,20 +11,20 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
- * Verifies {@code X-IremboPay-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "t.body">}.
- * The timestamp window stops replays of old, captured webhooks.
+ * Signature header {@code t=<unix seconds>,v1=<hex HMAC-SHA256 of "t.body">}, used for IremboPay webhooks and
+ * for callbacks from the AI trust zone. The timestamp window stops replays of old, captured messages.
  */
-final class WebhookSignature {
+public final class HmacSignature {
 
     private final byte[] secret;
     private final Duration tolerance;
 
-    WebhookSignature(String secret, Duration tolerance) {
+    public HmacSignature(String secret, Duration tolerance) {
         this.secret = secret.getBytes(StandardCharsets.UTF_8);
         this.tolerance = tolerance;
     }
 
-    boolean isValid(String header, String body, Instant now) {
+    public boolean isValid(String header, String body, Instant now) {
         if (header == null || body == null) {
             return false;
         }
@@ -53,7 +53,7 @@ final class WebhookSignature {
         return MessageDigest.isEqual(expected, v1.getBytes(StandardCharsets.US_ASCII));
     }
 
-    String sign(String body, Instant at) {
+    public String sign(String body, Instant at) {
         long ts = at.getEpochSecond();
         return "t=" + ts + ",v1=" + hmac(ts + "." + body);
     }

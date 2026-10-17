@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
 import rw.teleclinic.core.shared.ApiException;
+import rw.teleclinic.core.shared.HmacSignature;
 
 /**
  * Payments through IremboPay (Section 4.3, Phase 3). The webhook is a hint, not proof: every webhook is
@@ -38,7 +39,7 @@ public class PaymentService {
     private final IremboPayClient irembopay;
     private final ApplicationEventPublisher events;
     private final ObjectMapper json;
-    private final WebhookSignature signature;
+    private final HmacSignature signature;
     private final Clock clock;
 
     PaymentService(JdbcClient jdbc, IremboPayClient irembopay, ApplicationEventPublisher events, ObjectMapper json,
@@ -47,7 +48,7 @@ public class PaymentService {
         this.irembopay = irembopay;
         this.events = events;
         this.json = json;
-        this.signature = new WebhookSignature(props.webhookSecret(), props.signatureTolerance());
+        this.signature = new HmacSignature(props.webhookSecret(), props.signatureTolerance());
         this.clock = Clock.systemUTC();
     }
 

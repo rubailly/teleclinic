@@ -1,4 +1,4 @@
-package rw.teleclinic.core.payments;
+package rw.teleclinic.core.shared;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -6,9 +6,9 @@ import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
-class WebhookSignatureTests {
+class HmacSignatureTests {
 
-    private final WebhookSignature signature = new WebhookSignature("shared-secret", Duration.ofMinutes(5));
+    private final HmacSignature signature = new HmacSignature("shared-secret", Duration.ofMinutes(5));
     private final Instant now = Instant.parse("2026-10-16T08:00:00Z");
     private final String body = "{\"eventId\":\"evt_1\",\"type\":\"payment.succeeded\",\"paymentId\":\"pay_1\"}";
 
@@ -25,7 +25,7 @@ class WebhookSignatureTests {
 
     @Test
     void rejects_another_secret() {
-        String forged = new WebhookSignature("not-the-secret", Duration.ofMinutes(5)).sign(body, now);
+        String forged = new HmacSignature("not-the-secret", Duration.ofMinutes(5)).sign(body, now);
         assertThat(signature.isValid(forged, body, now)).isFalse();
     }
 

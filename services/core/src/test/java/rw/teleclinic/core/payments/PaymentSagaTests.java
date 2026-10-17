@@ -27,6 +27,7 @@ import rw.teleclinic.core.consultation.ConsultationEvents.ConsultationPaid;
 import rw.teleclinic.core.consultation.ConsultationService;
 import rw.teleclinic.core.consultation.ConsultationView;
 import rw.teleclinic.core.shared.ApiException;
+import rw.teleclinic.core.shared.HmacSignature;
 import rw.teleclinic.core.triage.TriageIntake;
 import rw.teleclinic.core.triage.TriageRequested;
 
@@ -53,7 +54,7 @@ class PaymentSagaTests extends IntegrationTest {
     @Autowired
     ApplicationEvents events;
 
-    final WebhookSignature signer = new WebhookSignature(SECRET, Duration.ofMinutes(5));
+    final HmacSignature signer = new HmacSignature(SECRET, Duration.ofMinutes(5));
     final UUID keza = UUID.fromString(KEZA_PATIENT_ID);
 
     @BeforeEach
@@ -141,7 +142,7 @@ class PaymentSagaTests extends IntegrationTest {
         ConsultationView c = bookForKeza();
         String pay = startPayment(c);
         String body = webhook(pay, "evt_forged");
-        String forged = new WebhookSignature("not-the-secret", Duration.ofMinutes(5)).sign(body, Instant.now());
+        String forged = new HmacSignature("not-the-secret", Duration.ofMinutes(5)).sign(body, Instant.now());
 
         assertThatThrownBy(() -> payments.handleWebhook(body, forged))
                 .isInstanceOf(ApiException.class).hasMessageContaining("signature");
