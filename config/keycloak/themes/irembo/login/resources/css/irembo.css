@@ -1,0 +1,52 @@
+/* IremboAccount look for the Keycloak stand-in. Demo only, clearly labelled on the page. */
+@import url("https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@300;400;600;700;800&display=swap");
+
+html, body, .login-pf body { background: #f3f5f6 !important; }
+body { font-family: "Nunito Sans", "Segoe UI", system-ui, sans-serif !important; color: #212529; }
+.login-pf-page { padding-top: 0 !important; min-height: 100vh; position: relative; overflow: hidden;
+  background: linear-gradient(115deg, #0052ad 0%, #0063cf 45%, #1f8bf0 100%) top / 100% 330px no-repeat, #f3f5f6; }
+.login-pf-page::before, .login-pf-page::after { content: ""; position: absolute; border-radius: 50%; border: 46px solid rgba(255,255,255,.07); pointer-events: none; }
+.login-pf-page::before { width: 420px; height: 420px; right: -90px; top: -150px; }
+.login-pf-page::after { width: 260px; height: 260px; left: -80px; top: 130px; border-width: 34px; }
+
+/* Header: wordmark and the stand-in label */
+#kc-header { margin: 0 !important; padding: 46px 20px 26px !important; color: #fff !important; position: relative; z-index: 1; }
+#kc-header-wrapper { font-size: inherit !important; letter-spacing: normal !important; line-height: 1.2 !important; padding: 0 !important;
+  text-transform: none !important; white-space: normal !important; text-align: center; }
+.ia-mark { font-size: 34px; font-weight: 300; color: #fff; letter-spacing: -.5px; }
+.ia-mark b { font-weight: 800; }
+.ia-tag { display: inline-block; margin-top: 10px; font-size: 12.5px; font-weight: 700; color: #3a2600; background: #ffc726;
+  padding: 4px 12px; border-radius: 12px; }
+
+/* Card */
+.card-pf { max-width: 440px !important; margin: 0 auto !important; border: 0 !important; border-top: 0 !important;
+  border-radius: 10px !important; box-shadow: 0 8px 28px rgba(16, 42, 84, .14) !important; padding: 30px 34px 26px !important; position: relative; z-index: 1; }
+.login-pf-page .login-pf-header { margin-bottom: 18px !important; }
+#kc-page-title { font-size: 22px !important; font-weight: 800 !important; color: #34495e !important; text-align: center; margin: 0 !important; }
+#kc-locale { display: none !important; }
+
+/* Fields */
+.login-pf-page label, .pf-c-form__label, .pf-c-form__label-text { font-weight: 700 !important; font-size: 14px !important; color: #34495e !important; }
+.login-pf-page .form-control, .pf-c-form-control, input#username, input#password {
+  height: 46px !important; font: 15px "Nunito Sans", system-ui, sans-serif !important; color: #212529 !important;
+  border: 1px solid #cfdae5 !important; border-radius: 5px !important; box-shadow: none !important; padding: 0 12px !important; background: #fff !important; }
+.login-pf-page .form-control:focus, .pf-c-form-control:focus, input#username:focus, input#password:focus {
+  border-color: #0063cf !important; box-shadow: 0 0 0 3px rgba(0, 99, 207, .15) !important; outline: none !important; }
+.pf-c-input-group { border-radius: 5px; }
+.pf-c-button.pf-m-control { border-radius: 0 5px 5px 0 !important; border-color: #cfdae5 !important; }
+.form-group { margin-bottom: 16px !important; }
+
+/* Primary button: IremboGov gradient */
+#kc-login, .pf-c-button.pf-m-primary, input.btn-primary { height: 48px !important; border: 0 !important; border-radius: 5px !important;
+  font: 700 16px "Nunito Sans", system-ui, sans-serif !important; color: #fff !important;
+  background: linear-gradient(100deg, #1f8bf0, #0063cf) !important; box-shadow: 0 2px 8px rgba(0, 99, 207, .25) !important; }
+#kc-login:hover { box-shadow: 0 6px 16px rgba(0, 99, 207, .35) !important; }
+#kc-form-options, .login-pf-page #kc-form-options .checkbox label { font-size: 13.5px !important; font-weight: 600 !important; color: #7c91a1 !important; }
+a { color: #0063cf !important; }
+.alert, .pf-c-alert { border-radius: 5px !important; font-size: 14px !important; }
+#kc-info, #kc-info-wrapper { background: transparent !important; border: 0 !important; text-align: center; color: #7c91a1 !important; font-size: 13px !important; }
+
+/* Footer note under the card */
+.card-pf::after { content: "TeleClinic prototype for the Irembo assessment"; display: block; text-align: center; margin-top: 20px;
+  font-size: 12.5px; color: #7c91a1; font-weight: 600; }
+@media (max-width: 520px) { .card-pf { margin: 0 12px !important; padding: 24px 20px !important; } .ia-mark { font-size: 28px; } }

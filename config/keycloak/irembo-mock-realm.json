@@ -1,7 +1,7 @@
 {
   "realm": "irembo-mock",
   "displayName": "IremboAccount (stand-in: Keycloak)",
-  "displayNameHtml": "<b>IremboAccount</b> <small>(labelled stand-in: Keycloak, synthetic users only)</small>",
+  "displayNameHtml": "<div class=\"ia-mark\"><b>irembo</b>Account</div><div class=\"ia-tag\">Demo stand-in (Keycloak). Synthetic users only.</div>",
   "enabled": true,
   "sslRequired": "none",
   "registrationAllowed": false,
@@ -173,5 +173,6 @@
         }
       ]
     }
-  ]
+  ],
+  "loginTheme": "irembo"
 }

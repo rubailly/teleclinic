@@ -53,6 +53,7 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
     volumes:
       - ./config/keycloak/irembo-mock-realm.json:/opt/keycloak/data/import/irembo-mock-realm.json:ro
+      - ./config/keycloak/themes/irembo:/opt/keycloak/themes/irembo:ro
     ports:
       - "9180:8080"
     healthcheck:
