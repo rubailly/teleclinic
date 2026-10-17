@@ -128,6 +128,27 @@ paths:
               properties: {reason: {type: string}}
       responses:
         '200': {description: Model disabled and audited}
+  /models/activate:
+    post:
+      tags: [Governance]
+      summary: Turn model suggestions back on, in ACTIVE or SHADOW mode
+      security: [{oidc: [triage.admin]}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string}
+                mode: {type: string, enum: [ACTIVE, SHADOW]}
+      responses:
+        '200':
+          description: Model enabled and audited
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelInfo'}
 webhooks:
   suggestionReady:
     post:

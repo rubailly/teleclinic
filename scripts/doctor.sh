@@ -39,9 +39,16 @@ check "Patroni cluster"                patroni
 check "etcd quorum"                    etcd_quorum
 check "Kafka replication"              kafka_isr
 check "Valkey (shared sessions)"       docker exec "$(c valkey)" valkey-cli ping
+model_mode() { docker exec "$(c triage-model)" python -c "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8100/models/active')); print(d['modelVersion'], d['mode'])"; }
+no_egress() {  # the anonymizer must not reach the internet; succeeding here is a failure
+  if docker exec "$(c anonymizer)" python -c "import urllib.request; urllib.request.urlopen('https://pypi.org', timeout=3)" >/dev/null 2>&1; then
+    echo "anonymizer reached the internet"; return 1; fi
+  echo "anonymizer has no route to the internet"; }
+check "AI model"                       model_mode
+check "AI zone isolation"              no_egress
 
-for svc in $(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/apps.yml ps --services 2>/dev/null); do
-  check "container: $svc" bash -c "docker inspect --format '{{.State.Health.Status}}' \$(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/apps.yml ps -q $svc) | grep -x healthy"
+for svc in $(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/ai.yml -f compose/apps.yml ps --services 2>/dev/null); do
+  check "container: $svc" bash -c "docker inspect --format '{{.State.Health.Status}}' \$(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/ai.yml -f compose/apps.yml ps -q $svc) | grep -x healthy"
 done
 
 if [ "$fails" -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) failed."; fi

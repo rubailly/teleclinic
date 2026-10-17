@@ -39,3 +39,4 @@ api() {
 status() { cat "$1.status"; }
 
 json() { python3 -c "import json,sys; d=json.load(sys.stdin); print(eval(sys.argv[1], {}, {'d': d}))" "$1"; }
+note() { printf '   %s\n' "$*"; }

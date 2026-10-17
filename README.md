@@ -13,6 +13,7 @@ make journey     # web journey: consent, triage, co-payment, webhook, queue, Kaf
 make scenario-kill-db-leader      # kill the Postgres leader under writes
 make scenario-kill-kafka-broker   # stop one Kafka broker
 make scenario-partition           # cut the leader's node off the network, then heal
+make clinician   # AI-proposed case, orders gated, clinician override, kill switch, no identifiers in AI logs
 make reset       # back to a known state (about 30 s)
 make test        # core unit and module-boundary tests (Java 21 in a container)
 ```
@@ -29,6 +30,8 @@ Requirements: Docker with Compose v2, `make`, `curl`. Nothing else needs to be i
 | PostgreSQL 16 with Patroni, 3 nodes and a 3-member etcd quorum, behind HAProxy | Real |
 | Kafka (KRaft), 3 brokers, replication factor 3, min ISR 2 | Real |
 | Valkey for shared HTTP sessions | Real, single node (production: three with Sentinel) |
+| Anonymization gateway (Presidio with Rwandan recognizers, allowlist, token vault) | Real |
+| Triage model (logistic regression on ONNX Runtime) | Real, but **trained on synthetic data with illustrative labels** |
 | **Keycloak** | **Labelled stand-in for IremboAccount** |
 | **irembopay-mock** | **Labelled stand-in for IremboPay and for the national insurance coverage check** |
 
@@ -67,6 +70,27 @@ Measured on a 12-core, 16 GB laptop (each scenario is a script you can rerun):
 
 Not in the demo: a hardware watchdog (none inside Docker), PgBouncer, Valkey Sentinel, and a second site.
 
+## Built so far (step 4): AI that advises and never decides
+
+- **Clinician queue** at http://localhost:9080/clinician (sign in as `clinician1`): most urgent first, review deadline per case, an AI-PROPOSED badge, rules and model side by side with contributing factors, confirm or override with a reason, and a signed decision line.
+- **Escalate-only merge.** The proposed urgency is the higher of rules and model. The model can never lower the rules floor.
+- **The gate is in the domain model, not the screen.** Orders, referrals and prescriptions return 403 until a clinician has finalised the triage. Every decision is recorded with its provenance: the model version as a device agent, the clinician as the verifier.
+- **Deadline.** A case not reviewed in time moves to UNREVIEWED_TIMEOUT for a supervisor; the rules urgency stays in force.
+- **Kill switch.** One call (`scripts/scenarios/model-kill-switch.sh off`) and new cases stay rules-only; the queue shows a banner. Shadow mode records suggestions without showing them.
+- **AI trust zone.** The model service reads `triage.requested`, sends each payload through the anonymization gateway, and posts a signed suggestion back. The gateway keeps an allowlist of fields, replaces the case id with a token only the core can resolve, generalises a few values, and redacts free text with Presidio (Rwandan national IDs, phone numbers, UPIs, Kinyarwanda and French names, districts). The model's output is scanned for identifiers before it leaves the zone. The gateway sits on an internal Docker network with no route out.
+- **Build-time gates.** The gateway image is only built if its synthetic PII suite passes (including canary values). The model image is only built if the model meets its release gates (under-triage rate and recall per age group and sex); the results are in its model card.
+
+Measured (synthetic data; numbers describe the demo model, not clinical performance):
+
+| What | Result |
+| --- | --- |
+| Model validation, 4,800 held-out synthetic cases | accuracy 0.958; under-triage rate 0.032 (gate 0.10); recall for urgent or higher 0.97 to 0.99 in every age group and sex (gate 0.85) |
+| Anonymization suite | 6 of 6 tests; 10 of 10 free-text identifiers removed (national IDs, three phone formats, UPI, names, district, email) |
+| Model path, event to suggestion in the core | 23 to 36 ms per case |
+| Model restart | a new case is handled about 4 s after the restart (the old instance leaves its consumer group cleanly) |
+| Escalation example | fever, headache and rash: rules SEMI_URGENT, model URGENT, proposed URGENT |
+| AI zone logs after a full run | 0 identifier matches; the anonymizer has no route to the internet |
+
 ## Demo users (synthetic)
 
 `patient1` (Uwase), `patient2` (Eric), `clinician1` (Dr Mukamana), `clerk1` (Habimana), `admin1`. One demo password for all of them, set in `.env.example`.
@@ -87,4 +111,4 @@ See `docs/URLS.md`.
 | irembopay-mock | 38 MiB | 128 MiB |
 | haproxy | 13 MiB | 128 MiB |
 
-About 1.4 GB in total after step 2; the three-node data tier of step 3 adds about 1.5 GB. `make reset` to a working stack: 42 s.
+About 2.5 GB for the whole stack after step 4. `make reset` to a working stack: 49 s.

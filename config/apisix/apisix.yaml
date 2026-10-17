@@ -28,6 +28,17 @@ routes:
           body: "not found\n"
     upstream_id: core-pool
 
+  # Callbacks from the AI trust zone reach the core directly, never through the public edge
+  - id: block-internal
+    uri: /internal/*
+    priority: 10
+    plugins:
+      fault-injection:
+        abort:
+          http_status: 404
+          body: "not found\n"
+    upstream_id: core-pool
+
   # Everything else goes to the core. The gateway creates the correlation id
   # (or keeps a caller-supplied one, used by the demo's fixed "demo-" prefix).
   - id: core

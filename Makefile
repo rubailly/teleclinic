@@ -1,6 +1,6 @@
 # TeleClinic reference platform. Run `make help` for the targets.
 SHELL := /bin/bash
-COMPOSE := docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/apps.yml
+COMPOSE := docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/ai.yml -f compose/apps.yml
 # Fail and retry a stalled download instead of hanging
 MVN_NET := -Daether.connector.connectTimeout=20000 -Daether.connector.requestTimeout=60000
 # Integration tests start a throwaway Postgres through the host Docker daemon (Testcontainers)
@@ -8,7 +8,7 @@ MAVEN := docker run --rm -v "$(CURDIR)/services/core":/w -v teleclinic-m2:/root/
 	-v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
 	--add-host=host.docker.internal:host-gateway maven:3.9.9-eclipse-temurin-21 mvn -B -q $(MVN_NET)
 
-.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition logs ps release-up
+.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition clinician logs ps release-up
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -33,7 +33,8 @@ doctor: .env ## Check every health endpoint
 	./scripts/doctor.sh
 
 test: ## Unit and module-boundary tests for the core (Java 21 in a container)
-	$(MAVEN) verify
+	@# The container runs as root; give the build output back to the host user whatever the result
+	$(MAVEN) verify; rc=$$?; docker run --rm -v "$(CURDIR)/services/core":/w alpine:3.20 chown -R $$(id -u):$$(id -g) /w/target; exit $$rc
 
 smoke: .env ## End-to-end login through the edge as patient1 (BFF, no token in the browser)
 	./scripts/smoke/login.sh patient1
@@ -49,6 +50,9 @@ scenario-kill-kafka-broker: .env ## Scene 4a: stop one Kafka broker; producers k
 
 scenario-partition: .env ## Scene 4b: isolate the leader's node; minority demotes, majority continues, heal
 	./scripts/scenarios/partition-node.sh
+
+clinician: .env ## Scene 2: AI-proposed case, orders refused until FINAL, override, kill switch
+	./scripts/smoke/clinician.sh
 
 logs: .env ## Follow logs of all services
 	$(COMPOSE) logs -f --tail=100
