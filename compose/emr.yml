@@ -62,6 +62,8 @@ services:
       OMRS_CONFIG_CONNECTION_DATABASE: openmrs
       OMRS_CONFIG_CONNECTION_USERNAME: openmrs
       OMRS_CONFIG_CONNECTION_PASSWORD: ${OPENMRS_DB_PASSWORD}
+      # The admin password set when the database is first created (the image's default otherwise)
+      OMRS_ADMIN_USER_PASSWORD: ${OPENMRS_ADMIN_PASSWORD}
     volumes: *initializer
     depends_on:
       openmrs-db: {condition: service_healthy}
@@ -250,9 +252,10 @@ services:
       LISTEN_ADDRESS: 0.0.0.0
       PORT: "4000"
       URL_SCHEME: http
-      URL_HOST: localhost
+      # The address browsers use: Lightning's live pages refuse websocket origins it does not list
+      URL_HOST: ${PUBLIC_HOST:-localhost}
       URL_PORT: "9480"
-      ORIGINS: http://localhost:9480
+      ORIGINS: http://${PUBLIC_HOST:-localhost}:9480
       SECRET_KEY_BASE: ${OPENFN_SECRET_KEY_BASE}
       PRIMARY_ENCRYPTION_KEY: ${OPENFN_ENCRYPTION_KEY}
       WORKER_SECRET: ${OPENFN_WORKER_SECRET}

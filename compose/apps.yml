@@ -100,7 +100,7 @@ services:
     networks: [teleclinic]
 
   # Ops cockpit and scenario runner. Holds the Docker socket to run the failure scenarios, so it listens on
-  # 127.0.0.1 only (host network, port 9500). A local demo tool; not part of the production design.
+  # 127.0.0.1 only by default (host network, port 9500). A local demo tool; not part of the production design.
   scenario-runner:
     build:
       context: ./services/scenario-runner
@@ -109,6 +109,10 @@ services:
     environment:
       # Mounted at the same path as on the host, so Compose run from here sees the same project as from the host
       REPO_DIR: ${REPO_DIR:-/work/teleclinic}
+      # A shared server: COCKPIT_BIND=0.0.0.0 with a COCKPIT_PASSWORD (scripts/deploy/server-env.py sets both)
+      COCKPIT_BIND: ${COCKPIT_BIND:-127.0.0.1}
+      COCKPIT_PASSWORD: ${COCKPIT_PASSWORD:-}
+      GRAFANA_PUBLIC_URL: ${GRAFANA_PUBLIC_URL:-http://localhost:9700}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
     volumes:

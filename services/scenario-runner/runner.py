@@ -8,6 +8,8 @@ a few times a second.
 Demo tool: it holds the Docker socket, so it listens on 127.0.0.1 only. Standard library plus psycopg.
 """
 
+import base64
+import hmac
 import html
 import json
 import os
@@ -25,6 +27,11 @@ import psycopg
 REPO = Path(os.environ.get("REPO_DIR", "/work/teleclinic"))
 STATIC = Path(__file__).parent / "static"
 EDGE = os.environ.get("EDGE_URL", "http://127.0.0.1:9080")
+# On a shared server the cockpit listens on every address behind a password (user "ops"); on the demo machine,
+# 127.0.0.1 only and no password. /health stays open for the container's health check.
+BIND = os.environ.get("COCKPIT_BIND", "127.0.0.1")
+PASSWORD = os.environ.get("COCKPIT_PASSWORD", "")
+GRAFANA = os.environ.get("GRAFANA_PUBLIC_URL", "http://localhost:9700")
 PAY = os.environ.get("IREMBOPAY_URL", "http://127.0.0.1:9280")
 DB = (f"host={os.environ.get('PROBE_DB_HOST', '127.0.0.1')} port={os.environ.get('PROBE_DB_PORT', '9432')} "
       f"dbname=teleclinic user={os.environ['DB_USER']} password={os.environ['DB_PASSWORD']} connect_timeout=2")
@@ -447,7 +454,7 @@ def runbook_page(name: str | None) -> bytes | None:
         if f.parent != RUNBOOKS.resolve() or not f.is_file():
             return None
         body, title = markdown(f.read_text()), f.read_text().splitlines()[0].lstrip("# ")
-        body += '<p class="back"><a href="/runbooks/">All runbooks</a> · <a href="http://localhost:9700">Dashboard</a> · <a href="/">Ops cockpit</a></p>'
+        body += f'<p class="back"><a href="/runbooks/">All runbooks</a> · <a href="{html.escape(GRAFANA)}">Dashboard</a> · <a href="/">Ops cockpit</a></p>'
     else:
         title = "Runbooks"
         items = sorted(RUNBOOKS.glob("*.md"))
@@ -472,10 +479,26 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def allowed(self) -> bool:
+        if not PASSWORD or self.path == "/health":
+            return True
+        given = self.headers.get("Authorization", "")
+        expected = "Basic " + base64.b64encode(f"ops:{PASSWORD}".encode()).decode()
+        if hmac.compare_digest(given.encode(), expected.encode()):
+            return True
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="TeleClinic ops cockpit"')
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return False
+
     def do_GET(self):
+        if not self.allowed():
+            return
         path, _, query = self.path.partition("?")
         if path == "/":
-            return self.send(200, (STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
+            page = (STATIC / "index.html").read_text().replace("http://localhost:9700", html.escape(GRAFANA))
+            return self.send(200, page.encode(), "text/html; charset=utf-8")
         if path.startswith("/static/"):
             f = (STATIC / path.removeprefix("/static/")).resolve()
             if f.parent != STATIC.resolve() or not f.is_file():
@@ -506,6 +529,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send(404, {"error": "not found"})
 
     def do_POST(self):
+        if not self.allowed():
+            return
         if self.path.startswith("/api/run/"):
             sid = self.path.removeprefix("/api/run/")
             if sid not in BY_ID:
@@ -531,5 +556,5 @@ if __name__ == "__main__":
     threading.Thread(target=probe_db, daemon=True).start()
     threading.Thread(target=probe_edge, daemon=True).start()
     port = int(os.environ.get("PORT", "9500"))
-    print(f"scenario runner on 127.0.0.1:{port}", flush=True)
-    ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    print(f"scenario runner on {BIND}:{port}" + (" (password required)" if PASSWORD else ""), flush=True)
+    ThreadingHTTPServer((BIND, port), Handler).serve_forever()

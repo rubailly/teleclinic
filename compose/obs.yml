@@ -20,20 +20,26 @@ services:
 
   grafana:
     image: grafana/grafana:11.3.1
+    # Grafana does not expand variables in dashboards or alert rules: copy both with the cockpit's address (where the
+    # runbooks live) filled in, then start as usual
+    entrypoint: ["sh", "-c", "for d in provisioning dashboards; do mkdir -p /tmp/$$d && cp -r /etc/teleclinic/$$d/. /tmp/$$d/ && find /tmp/$$d -type f -exec sed -i \"s#http://127.0.0.1:9500#$${COCKPIT_PUBLIC_URL}#g\" {} +; done && exec /run.sh"]
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       # Read-only dashboards for anyone on the demo machine; editing needs the admin login
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      GF_SERVER_ROOT_URL: http://localhost:9700
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/teleclinic-slo.json
+      GF_SERVER_ROOT_URL: ${GRAFANA_PUBLIC_URL:-http://localhost:9700}
+      # Where alert runbooks and dashboard links point (the cockpit serves the runbooks)
+      COCKPIT_PUBLIC_URL: ${COCKPIT_PUBLIC_URL:-http://127.0.0.1:9500}
+      GF_PATHS_PROVISIONING: /tmp/provisioning
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /tmp/dashboards/teleclinic-slo.json
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_NEWS_NEWS_FEED_ENABLED: "false"
     volumes:
-      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./config/grafana/provisioning:/etc/teleclinic/provisioning:ro
+      - ./config/grafana/dashboards:/etc/teleclinic/dashboards:ro
     ports:
       - "9700:3000"
     depends_on:

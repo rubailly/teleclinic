@@ -10,6 +10,14 @@
   // ---------- helpers ----------
   function safeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function safeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } }
+  // crypto.randomUUID needs a secure origin (HTTPS or localhost); getRandomValues works on plain HTTP too
+  function uuid() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+    const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
   const t = (k, vars = {}) => String(TC.text[lang][k] ?? TC.text.en[k] ?? k).replace(/\{(\w+)\}/g, (_, v) => esc(vars[v] ?? ""));
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const xsrf = () => (document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/) || [])[1] || "";
@@ -212,7 +220,7 @@
       const temp = parseFloat(document.getElementById("temp").value);
       const body = { patientId: pid, channel: "WEB", symptoms: [...picked], durationDays: days,
         vitals: isNaN(temp) ? null : { temperatureC: temp } };
-      const r = await api("POST", "/api/consultations", body, { "Idempotency-Key": crypto.randomUUID() });
+      const r = await api("POST", "/api/consultations", body, { "Idempotency-Key": uuid() });
       if (!r.ok) { btn.disabled = false; btn.textContent = t("getAdvice"); return toast(r.data?.issue?.[0]?.diagnostics || t("error")); }
       go(`#/advice/${r.data.id}`);
     };
