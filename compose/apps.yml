@@ -99,12 +99,13 @@ services:
     image: teleclinic/scenario-runner:dev
     network_mode: host
     environment:
-      REPO_DIR: /work/teleclinic
+      # Mounted at the same path as on the host, so Compose run from here sees the same project as from the host
+      REPO_DIR: ${REPO_DIR:-/work/teleclinic}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./:/work/teleclinic:ro
+      - ${REPO_DIR:-.}:${REPO_DIR:-/work/teleclinic}:ro
     depends_on:
       pgproxy:
         condition: service_healthy
@@ -116,19 +117,23 @@ services:
     mem_limit: 128m
     restart: unless-stopped
 
+  # The release script (scripts/release/blue-green.sh) sets the version of the idle colour; make up-lite and
+  # make reset go back to blue v1.4 live and green v1.5 ready to release.
   core-blue:
     <<: *core
-    image: teleclinic/core:v1.4
+    image: teleclinic/core:${BLUE_VERSION:-v1.4}
     environment:
       <<: *core-env
       RELEASE_COLOR: blue
-      RELEASE_VERSION: v1.4
+      RELEASE_VERSION: ${BLUE_VERSION:-v1.4}
+      RELEASE_FAULT_RATE: ${BLUE_FAULT_RATE:-0}
 
   core-green:
     <<: *core
-    image: teleclinic/core:v1.5
+    image: teleclinic/core:${GREEN_VERSION:-v1.5}
     profiles: ["release"]
     environment:
       <<: *core-env
       RELEASE_COLOR: green
-      RELEASE_VERSION: v1.5
+      RELEASE_VERSION: ${GREEN_VERSION:-v1.5}
+      RELEASE_FAULT_RATE: ${GREEN_FAULT_RATE:-0}

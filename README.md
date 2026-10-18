@@ -14,6 +14,9 @@ make scenario-kill-db-leader      # kill the Postgres leader under writes
 make scenario-kill-kafka-broker   # stop one Kafka broker
 make scenario-partition           # cut the leader's node off the network, then heal
 make scenario-webhooks            # replay the last payment webhook twice and forge one
+make release     # release v1.5 to the idle colour: 1, 10, 50, 100% under load, gated
+make release-bad # rollback drill: a build that fails 30% of API calls is caught and rolled back
+make switch-back # put traffic back on the previous colour
 make ussd        # book for a child from a basic phone, pay by mobile money, get an SMS
 make clinician   # AI-proposed case, orders gated, clinician override, kill switch, no identifiers in AI logs
 make reset       # back to a known state (about 30 s)
@@ -113,6 +116,24 @@ Measured on the demo machine (`make ussd`): the slowest gateway step, booking wi
 - The runner holds the Docker socket, so it uses the host network and listens on 127.0.0.1 only. It is a demo tool and not part of the production design; production runs these drills from a runbook with the same scripts.
 
 Measured from the cockpit, with the probes writing during each run: database leader killed, writes resumed after 16.8 s, 0 of 18 acknowledged writes lost; node partition, the old leader stopped accepting writes after 4.2 s and the majority elected a new leader after 23.0 s, identical rows (count and checksum) on all nodes after healing; one Kafka broker stopped, 50 of 50 messages written with `acks=all`.
+
+## Built so far: blue/green release with HAProxy
+
+- `scripts/release/blue-green.sh` finds the live colour, starts the new version on the idle one at weight 0, and moves traffic 1, 10, 50 and 100 percent through HAProxy's runtime API while k6 sends steady load through the public edge.
+- **Gate at every step:** the new colour's own error counters in HAProxy (5xx, response and connection errors) must stay under 1 percent, and HAProxy must keep it up. A breach puts all traffic back on the live colour in milliseconds, puts the new colour into maintenance and stops it.
+- The previous colour stays running at weight 0. `make switch-back` returns traffic to it, but only if Docker and HAProxy both report it healthy.
+- **Rollback drill:** `make release-bad` deploys v1.6 with a fault switched on by configuration (30 percent of API calls fail). It is the same code as v1.5, standing in for a bad build. Like a real bad build it passes its health checks, so only the traffic gate can catch it.
+- The cockpit has a button for each, and its header shows which releases are answering during a canary.
+
+Measured (k6 at 12 requests per second through the edge, plus the cockpit probe):
+
+| Run | Result |
+| --- | --- |
+| Release v1.5 to green | 1,181 requests, 0 failed, p95 7 ms; 100 s from start to green at 100 percent |
+| Rollback drill, v1.6 | caught at the 1 or 10 percent step in three runs; 1 failed request each time; weights switched back in 6 to 14 ms |
+| Edge probe during release, switch-back and drill | 285 of 285 requests answered 200 |
+
+The edge rate limit (1,200 requests per minute) is per client: HAProxy records the client address in `X-Real-IP`, overwriting any value sent by the client, and APISIX keys on it. Before this change APISIX only saw HAProxy's address, so all clients shared one limit.
 
 ## Demo users (synthetic)
 

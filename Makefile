@@ -1,6 +1,6 @@
 # TeleClinic reference platform. Run `make help` for the targets.
 SHELL := /bin/bash
-COMPOSE := docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/ai.yml -f compose/apps.yml
+COMPOSE := REPO_DIR=$(CURDIR) docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/ai.yml -f compose/apps.yml
 # Fail and retry a stalled download instead of hanging
 MVN_NET := -Daether.connector.connectTimeout=20000 -Daether.connector.requestTimeout=60000
 # Integration tests start a throwaway Postgres through the host Docker daemon (Testcontainers)
@@ -8,7 +8,7 @@ MAVEN := docker run --rm -v "$(CURDIR)/services/core":/w -v teleclinic-m2:/root/
 	-v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
 	--add-host=host.docker.internal:host-gateway maven:3.9.9-eclipse-temurin-21 mvn -B -q $(MVN_NET)
 
-.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition ussd scenario-webhooks clinician logs ps release-up
+.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition ussd scenario-webhooks clinician logs ps release release-bad switch-back
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -18,6 +18,8 @@ help: ## List targets
 
 up-lite: .env ## Build and start the lite profile, wait until healthy
 	$(COMPOSE) up -d --build --wait
+	@# The next release (green v1.5) is built now, so the release scene does not wait for a build
+	$(COMPOSE) --profile release build -q core-green
 	@# Compose health says the core is up; HAProxy needs two passing checks of its own before it routes to it
 	@for i in $$(seq 1 30); do curl -fs -o /dev/null http://localhost:9080/api/public/ping && echo "Edge is serving the core." && exit 0; sleep 1; done; echo "Edge did not reach the core in 30 s" >&2; exit 1
 
@@ -66,5 +68,11 @@ logs: .env ## Follow logs of all services
 ps: .env ## Show service status
 	$(COMPOSE) ps
 
-release-up: .env ## Start core-green (v1.5) beside blue, with weight 0 in HAProxy
-	$(COMPOSE) --profile release up -d --build --wait core-green
+release: .env ## Scene 4d: release v1.5 to the idle colour, 1/10/50/100% under load, gated, rollback on errors
+	./scripts/release/blue-green.sh v1.5
+
+release-bad: .env ## Scene 4d: rollback drill; v1.6 fails 30% of API calls and must be rolled back automatically
+	./scripts/release/blue-green.sh v1.6 --fault-rate 0.3 --expect-rollback
+
+switch-back: .env ## Put traffic back on the previous colour (kept running at weight 0)
+	./scripts/release/blue-green.sh --switch-back

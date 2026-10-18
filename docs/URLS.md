@@ -10,6 +10,7 @@
 | USSD aggregator callback | http://localhost:9380/ussd/callback | Form post: `sessionId`, `phoneNumber`, `serviceCode`, `text` |
 | Release running behind the edge | http://localhost:9080/api/public/version | `{"version":"v1.4","color":"blue"}` |
 | IremboAccount stand-in (Keycloak) | http://localhost:9180 | Realm `irembo-mock`; admin console at `/admin` |
+| HAProxy runtime API | 127.0.0.1:9999 (TCP) | Weights for the release script; local only |
 | HAProxy stats | http://localhost:9404/stats | Blue/green pool weights and health |
 | Postgres proxy stats (which node is leader) | http://localhost:9405/stats | `primary` shows the leader UP; `replicas` the standbys |
 | IremboPay mock: hosted checkout | http://localhost:9280/checkout/{paymentId} | Labelled mock; scenario controls under `/admin` |

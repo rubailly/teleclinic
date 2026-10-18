@@ -9,6 +9,7 @@ services:
     ports:
       - "9080:9080"   # public edge
       - "9404:9404"   # stats page (demo cockpit reads it)
+      - "127.0.0.1:9999:9999"   # runtime API (weights) for the release script; local only
     depends_on:
       apisix:
         condition: service_started
