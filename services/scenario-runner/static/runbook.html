@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{title}} · TeleClinic runbook</title>
+  <link rel="stylesheet" href="/static/cockpit.css">
+  <style>
+    .doc { max-width: 860px; margin: 24px auto 48px; padding: 28px 32px; }
+    .doc h1 { margin: 0 0 8px; font-size: 26px; color: var(--ink); }
+    .doc h2 { margin: 26px 0 8px; font-size: 18px; color: var(--brand-deep); }
+    .doc p, .doc li { line-height: 1.6; font-size: 15px; }
+    .doc li { margin: 4px 0; }
+    .doc code { font: 13px "JetBrains Mono", ui-monospace, monospace; background: var(--tint); padding: 1px 5px; border-radius: 4px; }
+    .doc pre { background: #0f1b2b; color: #cfd9e4; border-radius: 8px; padding: 12px 14px; white-space: pre-wrap; word-break: break-all;
+      font: 13px/1.5 "JetBrains Mono", ui-monospace, monospace; }
+    .doc a { color: var(--brand); font-weight: 700; }
+    .doc .back { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 14px; }
+    @media (max-width: 600px) { .doc { margin: 16px; padding: 20px 18px; } }
+  </style>
+</head>
+<body>
+<header class="top"><div class="bar"><div class="mark"><b>Tele</b>Clinic <span class="pill">RUNBOOK</span></div></div></header>
+<main class="card doc">{{body}}</main>
+</body>
+</html>

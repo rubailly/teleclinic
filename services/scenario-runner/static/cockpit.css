@@ -14,6 +14,7 @@ body { margin: 0; font-family: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
 .top-right { display: flex; gap: 14px; align-items: center; font-weight: 700; font-size: 14px; }
 .release { background: rgba(255,255,255,.16); border-radius: 14px; padding: 4px 12px; }
 .clock { font-variant-numeric: tabular-nums; opacity: .85; }
+.toplink { color: #fff; text-decoration: none; opacity: .92; } .toplink:hover { opacity: 1; text-decoration: underline; }
 .hero { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; padding-top: 10px; padding-bottom: 26px; flex-wrap: wrap; }
 .hero h1 { margin: 0 0 6px; font-size: 28px; font-weight: 800; }
 .hero p { margin: 0; max-width: 520px; opacity: .92; }
@@ -102,6 +103,6 @@ h2 { font-size: 17px; margin: 0; color: var(--slate); font-weight: 800; }
 
 @media (max-width: 600px) {
   .bar, .hero, .layout { padding-left: 16px; padding-right: 16px; }
-  .clock { display: none; }
+  .clock, .toplink { display: none; }
   .tile { min-width: calc(50% - 5px); flex: 1; }
 }

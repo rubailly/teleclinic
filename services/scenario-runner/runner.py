@@ -8,6 +8,7 @@ a few times a second.
 Demo tool: it holds the Docker socket, so it listens on 127.0.0.1 only. Standard library plus psycopg.
 """
 
+import html
 import json
 import os
 import re
@@ -275,6 +276,13 @@ def probe_db():
 
 
 def probe_edge():
+    # Startup is not an outage: record from the first answer on, then every failure counts
+    while True:
+        try:
+            http_json(f"{EDGE}/api/public/version", 2)
+            break
+        except Exception:
+            time.sleep(1)
     while True:
         t0 = time.time()
         ok, note = False, ""
@@ -320,6 +328,79 @@ def start_run(sid: str) -> dict:
     return {"id": rid}
 
 
+# ---------------------------------------------------------------- runbooks
+
+RUNBOOKS = REPO / "docs" / "runbooks"
+
+
+def inline(text: str) -> str:
+    text = html.escape(text)
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", text)
+    text = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', text)
+    return re.sub(r'(?<![">])(https?://[^\s<)]+)', r'<a href="\1">\1</a>', text)  # bare URLs
+
+
+def markdown(md: str) -> str:
+    """Enough Markdown for the runbooks: headings, paragraphs, lists, fenced code, inline code, bold, links."""
+    out, para, lst, code = [], [], None, None
+    def flush():
+        nonlocal para, lst
+        if para:
+            out.append("<p>" + inline(" ".join(para)) + "</p>")
+            para = []
+        if lst:
+            start = f' start="{lst[2]}"' if lst[0] == "ol" and lst[2] != 1 else ""
+            out.append(f"<{lst[0]}{start}>" + "".join(f"<li>{inline(i)}</li>" for i in lst[1]) + f"</{lst[0]}>")
+            lst = None
+    for line in md.splitlines():
+        stripped = line.strip()
+        if code is not None:
+            if stripped.startswith("```"):
+                out.append("<pre>" + html.escape("\n".join(code)) + "</pre>")
+                code = None
+            else:
+                code.append(stripped)
+            continue
+        if stripped.startswith("```"):
+            flush(); code = []
+        elif stripped.startswith("#"):
+            flush(); level = len(stripped) - len(stripped.lstrip("#"))
+            out.append(f"<h{level}>{inline(stripped[level:].strip())}</h{level}>")
+        elif m := re.match(r"^(?:[-*]|\d+\.)\s+(.*)", stripped):
+            kind = "ol" if stripped[0].isdigit() else "ul"
+            if para:
+                flush()
+            if not lst or lst[0] != kind:
+                # a numbered list keeps its numbers across a code block between items
+                flush(); lst = (kind, [], int(stripped.split(".")[0]) if kind == "ol" else 1)
+            lst[1].append(m.group(1))
+        elif stripped == "":
+            flush()
+        elif lst:
+            lst[1][-1] += " " + stripped
+        else:
+            para.append(stripped)
+    flush()
+    return "\n".join(out)
+
+
+def runbook_page(name: str | None) -> bytes | None:
+    if name:
+        f = (RUNBOOKS / f"{name}.md").resolve()
+        if f.parent != RUNBOOKS.resolve() or not f.is_file():
+            return None
+        body, title = markdown(f.read_text()), f.read_text().splitlines()[0].lstrip("# ")
+        body += '<p class="back"><a href="/runbooks/">All runbooks</a> · <a href="http://localhost:9700">Dashboard</a> · <a href="/">Ops cockpit</a></p>'
+    else:
+        title = "Runbooks"
+        items = sorted(RUNBOOKS.glob("*.md"))
+        body = "<h1>Runbooks</h1><p>One page per alert. Each alert in Grafana links to its page.</p><ul>" + "".join(
+            f'<li><a href="/runbooks/{f.stem}">{html.escape(f.read_text().splitlines()[0].lstrip("# "))}</a></li>' for f in items) + "</ul>"
+    page = (STATIC / "runbook.html").read_text().replace("{{title}}", html.escape(title)).replace("{{body}}", body)
+    return page.encode()
+
+
 # ---------------------------------------------------------------- HTTP
 
 class Handler(BaseHTTPRequestHandler):
@@ -360,6 +441,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(404, {"error": "no such run"})
             start = int(query.removeprefix("from=") or 0) if query.startswith("from=") else 0
             return self.send(200, {**summary(run), "lines": run["lines"][start:], "from": start})
+        if path.startswith("/runbooks"):
+            name = path.removeprefix("/runbooks").strip("/") or None
+            page = runbook_page(name)
+            return self.send(200, page, "text/html; charset=utf-8") if page else self.send(404, {"error": "no such runbook"})
         if path == "/health":
             return self.send(200, {"status": "ok"})
         self.send(404, {"error": "not found"})

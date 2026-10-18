@@ -40,6 +40,7 @@ Requirements: Docker with Compose v2, `make`, `curl`. Nothing else needs to be i
 | **Keycloak** | **Labelled stand-in for IremboAccount** |
 | **irembopay-mock** | **Labelled stand-in for IremboPay and for the national insurance coverage check** |
 | USSD gateway (menus, sessions in Valkey, one page per step) | Real |
+| Prometheus and Grafana (SLO dashboard, 5 alert rules, runbooks) | Real |
 | Ops cockpit and scenario runner (runs the scenario scripts, live probes, reconciliation) | Real; a local demo tool on 127.0.0.1 |
 | **Phone simulator** | **Labelled stand-in for the telecom aggregator, a basic phone, its mobile-money prompt and SMS** |
 
@@ -134,6 +135,15 @@ Measured (k6 at 12 requests per second through the edge, plus the cockpit probe)
 | Edge probe during release, switch-back and drill | 285 of 285 requests answered 200 |
 
 The edge rate limit (1,200 requests per minute) is per client: HAProxy records the client address in `X-Real-IP`, overwriting any value sent by the client, and APISIX keys on it. Before this change APISIX only saw HAProxy's address, so all clients shared one limit.
+
+## Built so far: service levels, alerts and runbooks
+
+- **SLO dashboard** at http://localhost:9700 (read-only without login): edge availability and error budget against the 99.95% target, API p95, USSD step p95 against 1.5 s, rules p95 against 100 ms, whether the database has a writable leader; then rows for the release (weights and errors per colour), clinical safety (cases waiting, past their deadline, model on or off), bookings and payments (by channel, webhook outcomes, outbox), and the data tier (Patroni leader over time, replica lag, etcd).
+- **Where the numbers come from:** the core (Micrometer: rules timing, state changes, webhook outcomes, cases waiting and overdue, outbox backlog), the USSD gateway (time per step), HAProxy on the edge and in front of PostgreSQL (built-in exporter), Patroni and etcd. Prometheus scrapes every 5 s. Metrics are counts and timings only; a test checks that the endpoint carries no identifiers.
+- **Five alert rules**, provisioned as code, each with a runbook link: no writable database leader (critical), edge error budget burning fast (critical, 5 minute and 1 hour windows at 14.4 times the budget), triage cases past their review deadline, USSD steps over budget, and events not reaching Kafka.
+- **Runbooks** in `docs/runbooks`, one per alert, served at http://127.0.0.1:9500/runbooks/: what it means, what to check first, what to do, what to record.
+
+Measured: killing the database leader from the cockpit, the alert fired 17 s after the scenario started (13 s after the kill) and resolved on its own once pg-3 took over; writes resumed after 18.7 s with 0 of 18 acknowledged writes lost. After `make reset` all five alerts are inactive and the edge shows 0 errors (the cockpit's probe now starts once the core answers).
 
 ## Demo users (synthetic)
 
