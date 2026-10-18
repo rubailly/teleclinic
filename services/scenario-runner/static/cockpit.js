@@ -137,7 +137,7 @@ function renderScenarios(busy) {
   rendered = key;
   $("scenarios").innerHTML = scenarios.map((s) => `
     <div class="scn ${last?.run?.scenario === s.id && busy ? "active" : ""}">
-      <div><div class="tags"><span class="badge b-muted">Scene ${esc(s.scene)}</span>${s.kind === "failure" ? '<span class="badge b-bad">failure</span>' : s.kind === "security" ? '<span class="badge b-violet">security</span>' : ""}</div><b>${esc(s.title)}</b></div>
+      <div><div class="tags"><span class="badge b-muted">Scene ${esc(s.scene)}</span>${s.kind === "failure" ? '<span class="badge b-bad">failure</span>' : s.kind === "security" ? '<span class="badge b-violet">security</span>' : s.kind === "release" ? '<span class="badge b-ok">release</span>' : ""}</div><b>${esc(s.title)}</b></div>
       <button class="run ${s.kind === "failure" ? "failure" : ""}" data-run="${s.id}" ${busy ? "disabled" : ""}>Run</button>
       <p>${esc(s.detail)}</p>
     </div>`).join("");
@@ -183,8 +183,11 @@ async function poll() {
     nodes(s);
     recon(s);
     events(s);
-    const v = s.probes.edge.filter((p) => p[1]).slice(-1)[0];
-    $("release").textContent = v ? `release ${v[3]}` : "release unknown";
+    // Which releases answered the last 10 s of edge probes: one during normal running, two during a canary
+    const served = s.probes.edge.filter((p) => p[1] && p[0] > s.now - 10000).map((p) => p[3]);
+    const mix = Object.entries(served.reduce((a, v) => ({ ...a, [v]: (a[v] || 0) + 1 }), {})).sort((a, b) => b[1] - a[1]);
+    $("release").textContent = !mix.length ? "release unknown" : mix.length === 1 ? `release ${mix[0][0]}`
+      : mix.map(([v, n]) => `${v} ${Math.round((n / served.length) * 100)}%`).join(" · ");
     const busy = s.run?.status === "running";
     renderScenarios(busy);
     if (s.run && !run.id) run = { id: s.run.id, from: 0 };  // page opened while a run is going
