@@ -37,3 +37,22 @@
 .signin-card { text-align: center; padding: 30px 20px; }
 .signin-card .ring { margin: 0 auto 14px; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 28px;
   color: var(--brand); background: var(--tint); }
+
+/* Who accessed my record */
+.mine { display: flex; gap: 8px; align-items: center; justify-content: flex-end; font-size: 13.5px; color: var(--muted); margin: 4px 0 10px; }
+.access { list-style: none; margin: 0; padding: 0; }
+.access li { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); align-items: flex-start; }
+.access li:last-child { border-bottom: 0; }
+.access .grow { flex: 1; min-width: 0; font-size: 14.5px; }
+.access .line { margin-bottom: 2px; }
+.access time { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.who-ico { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--tint); color: var(--brand); font-size: 18px; }
+.who-ico.clinician { background: #e3f6ef; color: var(--success); }
+.access li.denied .who-ico { background: var(--danger-tint); color: var(--danger); }
+.access .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.badge.purpose.TREAT { background: var(--success-tint); color: var(--success); }
+.badge.purpose.BREAK_GLASS { background: var(--danger); color: #fff; }
+.badge.purpose.PATIENT_ACCESS { background: var(--tint); color: var(--brand); }
+.badge.refused { background: var(--danger-tint); color: var(--danger); }
+.access .reason { margin-top: 6px; font-size: 13.5px; color: #842029; background: var(--danger-tint); border-radius: 6px; padding: 6px 10px; }
+.foot-note { margin-top: 16px; font-size: 13px; color: var(--muted); display: flex; gap: 8px; align-items: flex-start; }

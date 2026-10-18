@@ -129,7 +129,7 @@
         <div class="grid grid-3">
           <a class="tile" href="#/start"><div class="ico">${I("video")}</div><div><h4>${t("svcTele")}</h4><p>${t("svcTeleD")}</p></div></a>
           <a class="tile" href="#/visits"><div class="ico">${I("clipboard")}</div><div><h4>${t("svcVisits")}</h4><p>${t("svcVisitsD")}</p></div></a>
-          <a class="tile" href="#/visits"><div class="ico">${I("eye")}</div><div><h4>${t("svcAccess")}</h4><p>${t("svcAccessD")}</p></div></a>
+          <a class="tile" href="#/access"><div class="ico">${I("eye")}</div><div><h4>${t("svcAccess")}</h4><p>${t("svcAccessD")}</p></div></a>
         </div>
       </section>`, { compactHero: false });
   }
@@ -309,13 +309,53 @@
     </div></div>`);
   }
 
+  // Who accessed my record: every read and change of a person's health data, from the audit trail
+  async function access(pid) {
+    if (!(await whoAmI())) return needSignIn();
+    if (!pid) {
+      const r = await api("GET", "/api/me/patients");
+      if (!r.ok) return toast(t("error"));
+      if (r.data.length === 1) return go(`#/access/${r.data[0].patientId}`);
+      layout(`<h1>${t("svcAccess")}</h1><p>${t("accessPick")}</p>`, `<div class="narrow page"><div class="page-card">
+        <div class="grid">${r.data.map((p) => `<a class="tile" href="#/access/${p.patientId}">
+          <div class="avatar ${p.relation === "GUARDIAN" ? "child" : ""}">${initials(p.name)}</div>
+          <div><h4>${esc(p.name)} ${p.relation === "SELF" ? `<span class="badge">${t("me")}</span>` : `<span class="badge ok">${t("guardianOf")}</span>`}</h4></div>
+          <span style="margin-left:auto;color:var(--muted)">${I("arrow")}</span></a>`).join("")}</div></div></div>`);
+      return;
+    }
+    const [people, log] = await Promise.all([api("GET", "/api/me/patients"), api("GET", `/api/me/patients/${pid}/access-log`)]);
+    if (!log.ok) return toast(t("error"));
+    const who = (people.ok ? people.data : []).find((p) => p.patientId === pid);
+    const showMine = safeGet("tc.access.mine") === "1";
+    const entries = log.data.entries.filter((e) => showMine || !e.you);
+    const icon = (e) => I(e.role === "clinician" ? "stethoscope" : e.you ? "user" : e.role === "admin" ? "shield" : "user");
+    const purpose = (e) => e.purpose ? `<span class="badge purpose ${e.purpose}">${t("purpose_" + e.purpose)}</span>` : "";
+    layout(`<h1>${t("svcAccess")}</h1><p>${who ? esc(who.name) + " · " : ""}${t("accessD")}</p>`, `
+      <div class="narrow page"><div class="page-card">
+        ${pageHead(people.ok && people.data.length > 1 ? "#/access" : "#/")}
+        <label class="mine"><input type="checkbox" id="mine" ${showMine ? "checked" : ""}> ${t("showMine")}</label>
+        ${entries.length ? `<ul class="access">${entries.map((e) => `<li class="${e.outcome === "DENIED" ? "denied" : ""}">
+          <div class="who-ico ${e.role}">${icon(e)}</div>
+          <div class="grow">
+            <div class="line"><b>${e.you ? t("you") : esc(e.who || t("unknown"))}</b> <span class="muted">${esc(t("role_" + e.role) || e.role)}</span></div>
+            <div>${t("action_" + e.action)} ${t("res_" + e.resource)}</div>
+            <div class="chips">${purpose(e)}${e.outcome === "DENIED" ? `<span class="badge refused">${t("refused")}</span>` : ""}</div>
+            ${e.breakGlassReason ? `<div class="reason">${I("alert")} ${t("reasonGiven")} “${esc(e.breakGlassReason)}”</div>` : ""}
+          </div>
+          <time>${new Date(e.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</time>
+        </li>`).join("")}</ul>` : `<p class="muted center">${t("accessNone")}</p>`}
+        <p class="foot-note">${I("lock")} ${t("accessFoot")}</p>
+      </div></div>`);
+    document.getElementById("mine").onchange = (ev) => { safeSet("tc.access.mine", ev.target.checked ? "1" : "0"); access(pid); };
+  }
+
   // ---------- router ----------
   async function render() {
     clearTimeout(pollTimer);
     const after = safeGet("tc.after");
     if (after && (await whoAmI())) { safeSet("tc.after", ""); if (after !== location.hash) return go(after); }
     const [, view, id] = (location.hash.replace(/^#\/?/, "") || "").match(/^([a-z]*)\/?(.*)$/) || [];
-    const routes = { "": home, start, consent, symptoms, advice, pay, visit, visits };
+    const routes = { "": home, start, consent, symptoms, advice, pay, visit, visits, access };
     window.scrollTo(0, 0);
     try { await (routes[view] || home)(id); } catch (e) { console.error(e); toast(t("error")); }
   }

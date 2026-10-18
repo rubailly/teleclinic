@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0063cf">
+  <title>TeleClinic audit trail</title>
+  <link rel="icon" href="/ui/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/ui/tc.css">
+  <link rel="stylesheet" href="/clinician/clinician.css">
+  <link rel="stylesheet" href="audit.css">
+</head>
+<body>
+<div class="notice"><b>Prototype.</b> Audit explorer for auditors, with synthetic data. Reading the trail is recorded in the trail.</div>
+<header class="topbar">
+  <div class="wrap wide">
+    <nav class="nav">
+      <a class="wordmark" href="/audit/"><b>Tele</b><span>Clinic</span><small>Audit</small></a>
+      <div class="nav-links">
+        <span class="who" id="who">…</span>
+        <form id="logout" method="post" action="/logout"><input type="hidden" name="_csrf" id="csrf">
+          <button><span id="logout-icon"></span><span class="label">Sign out</span></button></form>
+      </div>
+    </nav>
+    <div class="hero compact head">
+      <div><h1>Audit trail</h1><p>Application reads and changes with their purpose, and database activity captured by pgAudit, in one hash chain.</p></div>
+      <div class="stats" id="stats"></div>
+    </div>
+  </div>
+</header>
+
+<div id="chain" class="chain"></div>
+
+<main class="wrap wide audit-work">
+  <section class="card raised">
+    <div class="filters">
+      <div class="seg" id="source">
+        <button data-source="" class="on">All</button><button data-source="APPLICATION">Application</button><button data-source="DATABASE">Database</button>
+      </div>
+      <input id="patient" placeholder="Patient id (optional)" spellcheck="false">
+      <label class="small"><input type="checkbox" id="searches"> Include worklist searches</label>
+      <button class="btn btn-light" id="refresh">Refresh</button>
+      <span class="muted small" id="updated"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Time</th><th>Source</th><th>Who</th><th>Action</th><th>Resource</th><th>Purpose</th><th>Outcome</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+  <aside class="card raised entry" id="entry"><p class="muted">Select an entry to see every field and how it links to the one before.</p></aside>
+</main>
+<script src="/ui/icons.js"></script>
+<script src="audit.js"></script>
+</body>
+</html>

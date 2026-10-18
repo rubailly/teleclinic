@@ -1,0 +1,41 @@
+/* Audit explorer on top of the clinician workspace styles */
+.chain { padding: 12px 0; font-weight: 700; font-size: 14.5px; border-bottom: 1px solid var(--line); background: #fff; }
+.chain .wrap { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.chain.intact { background: var(--success-tint); color: #0b5c42; border-color: #bfe8d6; }
+.chain.broken { background: var(--danger); color: #fff; }
+.chain .hash { font: 12.5px ui-monospace, "JetBrains Mono", monospace; opacity: .85; }
+.chain button { margin-left: auto; }
+.audit-work { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(300px, 1fr); gap: 18px; padding-top: 20px; padding-bottom: 30px; align-items: start; }
+@media (max-width: 1250px) { .audit-work { grid-template-columns: minmax(0, 1fr); } .entry { position: static; } }
+.filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.seg button { border: 0; background: #fff; padding: 7px 14px; font: 700 13px inherit; font-family: inherit; color: var(--slate); cursor: pointer; }
+.seg button.on { background: var(--brand); color: #fff; }
+.filters label { display: inline-flex; gap: 6px; align-items: center; margin: 0; font-weight: 600; color: var(--slate); }
+.filters label input { min-width: 0; }
+.filters input { border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 10px; font: 13px ui-monospace, monospace; min-width: 280px; }
+.table-wrap { overflow-x: auto; }
+.audit-work table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.audit-work th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.audit-work td { padding: 7px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.audit-work tbody tr { cursor: pointer; }
+.audit-work tbody tr:hover { background: var(--surface); }
+.audit-work tbody tr.sel { background: var(--tint); }
+.audit-work tbody tr.broken { background: var(--danger-tint); box-shadow: inset 4px 0 0 var(--danger); }
+.mono { font: 12px ui-monospace, "JetBrains Mono", monospace; color: var(--slate); }
+.src { font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; letter-spacing: .04em; }
+.src.APPLICATION { background: var(--tint); color: var(--brand); }
+.src.DATABASE { background: #efe7fc; color: #6d3fc0; }
+.pur { font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; background: var(--surface); color: var(--slate); }
+.pur.BREAK_GLASS { background: var(--danger); color: #fff; }
+.pur.TREAT { background: var(--success-tint); color: var(--success); }
+.out-DENIED { color: var(--danger); font-weight: 800; }
+.out-SUCCESS { color: var(--success); font-weight: 700; }
+.entry { padding: 20px !important; position: sticky; top: 12px; }
+.entry h3 { margin: 0 0 12px; }
+.entry dl { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; font-size: 13px; margin: 0 0 14px; }
+.entry dt { color: var(--muted); font-weight: 600; }
+.entry dd { margin: 0; overflow-wrap: anywhere; }
+.entry pre { background: #0f1b2b; color: #cfd9e4; border-radius: 8px; padding: 10px 12px; font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; }
+.link { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--muted); margin: 6px 0; }
+.link .mono { word-break: break-all; min-width: 0; }

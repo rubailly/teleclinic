@@ -16,7 +16,8 @@ function xsrf() {
 async function api(method, path, body) {
   const res = await fetch(path, {
     method, credentials: "same-origin",
-    headers: { "Content-Type": "application/json", "X-XSRF-TOKEN": xsrf() },
+    // The clinician workspace reads records to treat; the core refuses clinical reads without a purpose of use
+    headers: { "Content-Type": "application/json", "X-XSRF-TOKEN": xsrf(), "X-Purpose-Of-Use": "TREAT" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (res.status === 401) { location.href = "/login"; throw new Error("signed out"); }
