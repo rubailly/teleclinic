@@ -264,3 +264,99 @@ groups:
       runbook_url: http://127.0.0.1:9500/runbooks/outbox-backlog
       __dashboardUid__: teleclinic-slo
       __panelId__: '23'
+  - uid: break-glass-access
+    title: Break-glass access to a patient record
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prom
+      model:
+        refId: A
+        expr: sum(increase(teleclinic_audit_records_total{purpose="BREAK_GLASS",outcome="SUCCESS"}[10m]))
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: dropNN
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+    for: 0s
+    noDataState: OK
+    execErrState: Error
+    isPaused: false
+    labels:
+      severity: critical
+      service: teleclinic
+    annotations:
+      summary: A clinician opened a patient record with break-glass (no consent check).
+      description: Allowed by design for emergencies; a supervisor reviews the reason within 24 hours.
+      runbook_url: http://127.0.0.1:9500/runbooks/break-glass-access
+      __dashboardUid__: teleclinic-slo
+      __panelId__: '30'
+  - uid: audit-chain-broken
+    title: Audit chain broken
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prom
+      model:
+        refId: A
+        expr: min(teleclinic_audit_chain_intact)
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: dropNN
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
+    for: 0s
+    noDataState: OK
+    execErrState: Error
+    isPaused: false
+    labels:
+      severity: critical
+      service: teleclinic
+    annotations:
+      summary: An audit entry no longer matches its hash, or entries are missing.
+      description: Someone changed or removed audit records outside the application. Treat as a security incident.
+      runbook_url: http://127.0.0.1:9500/runbooks/audit-chain-broken
+      __dashboardUid__: teleclinic-slo
+      __panelId__: '29'

@@ -4,6 +4,10 @@
 | --- | --- | --- |
 | Public edge (HAProxy → APISIX → core) | http://localhost:9080 | Sign in at `/login`; `/api/me` shows the session identity |
 | Patient web app | http://localhost:9080/app/ | `/` redirects here; sign in as `patient1` or `patient2` |
+| Who accessed my record | http://localhost:9080/app/#/access | Patient app; sign in as `patient2` (Eric) |
+| Audit explorer | http://localhost:9080/audit/ | Sign in as `admin1`; Verify now recomputes the chain |
+| FHIR Patient read | http://localhost:9080/fhir/Patient/{id} | Needs `X-Purpose-Of-Use`; consent for TREAT and PAYMENT |
+| FHIR AuditEvent search | http://localhost:9080/fhir/AuditEvent?entity=Patient/{id} | Auditors (`admin1`) |
 | Clinician queue | http://localhost:9080/clinician/ | Sign in as `clinician1` |
 | Grafana SLO dashboard | http://localhost:9700 | Read-only without login; admin password in `.env` |
 | Runbooks | http://127.0.0.1:9500/runbooks/ | One per alert; linked from each alert rule |

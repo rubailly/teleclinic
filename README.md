@@ -14,6 +14,8 @@ make scenario-kill-db-leader      # kill the Postgres leader under writes
 make scenario-kill-kafka-broker   # stop one Kafka broker
 make scenario-partition           # cut the leader's node off the network, then heal
 make scenario-webhooks            # replay the last payment webhook twice and forge one
+make audit       # purpose of use and consent enforced, who accessed my record, DBA query captured by pgAudit
+make scenario-tamper              # a DBA edits an audit row; the hash chain finds it, pgAudit names the role
 make release     # release v1.5 to the idle colour: 1, 10, 50, 100% under load, gated
 make release-bad # rollback drill: a build that fails 30% of API calls is caught and rolled back
 make switch-back # put traffic back on the previous colour
@@ -40,6 +42,8 @@ Requirements: Docker with Compose v2, `make`, `curl`. Nothing else needs to be i
 | **Keycloak** | **Labelled stand-in for IremboAccount** |
 | **irembopay-mock** | **Labelled stand-in for IremboPay and for the national insurance coverage check** |
 | USSD gateway (menus, sessions in Valkey, one page per step) | Real |
+| Audit: interceptor, purpose-of-use and consent policy, pgAudit, hash chain, explorer | Real |
+| Log shipper (Vector) for pgAudit lines | Real |
 | Prometheus and Grafana (SLO dashboard, 5 alert rules, runbooks) | Real |
 | Ops cockpit and scenario runner (runs the scenario scripts, live probes, reconciliation) | Real; a local demo tool on 127.0.0.1 |
 | **Phone simulator** | **Labelled stand-in for the telecom aggregator, a basic phone, its mobile-money prompt and SMS** |
@@ -144,6 +148,19 @@ The edge rate limit (1,200 requests per minute) is per client: HAProxy records t
 - **Runbooks** in `docs/runbooks`, one per alert, served at http://127.0.0.1:9500/runbooks/: what it means, what to check first, what to do, what to record.
 
 Measured: killing the database leader from the cockpit, the alert fired 17 s after the scenario started (13 s after the kill) and resolved on its own once pg-3 took over; writes resumed after 18.7 s with 0 of 18 acknowledged writes lost. After `make reset` all five alerts are inactive and the edge shows 0 errors (the cockpit's probe now starts once the core answers).
+
+## Built so far: audit you can verify (Task 3)
+
+- **Purpose of use on every clinical read.** `GET /fhir/Patient/{id}`, the clinician's case and patient views and a staff read of a consultation all need `X-Purpose-Of-Use` (TREAT, PAYMENT, OPERATIONS, PATIENT_ACCESS, BREAK_GLASS). The role must be allowed that purpose; TREAT and PAYMENT need the patient's active consent for it; BREAK_GLASS needs `X-Break-Glass-Reason`. Otherwise: 403 with an OperationOutcome, and the refusal is recorded.
+- **Three layers, one trail.** The application records who, role, which patient, what, purpose, basis (consent id, data subject, break-glass) and outcome, through the outbox to Kafka (`audit.events`), so a record is not lost when Kafka is down. pgAudit records every statement by administrator roles and schema changes by the application role; Vector ships those lines to Kafka (`audit.db`). One writer appends both to `audit.event` with a sequence number and a SHA-256 chain; a row lock on the chain head keeps blue and green from forking it.
+- **Append-only.** A trigger refuses UPDATE, DELETE and TRUNCATE on the trail. Getting around it needs DDL, which pgAudit records, and the change breaks the chain.
+- **Verification.** Every 30 s in the background and on demand. It reports the first entry that changed, is missing, or the trail cut short at the end. A break raises "Audit chain broken" (critical); a break-glass read raises "Break-glass access" for supervisor review. Both have runbooks.
+- **Who accessed my record** in the patient app (http://localhost:9080/app/#/access): every read and change by someone else, with role, purpose, refusals and the break-glass reason. **Audit explorer** for auditors at http://localhost:9080/audit/ (`admin1`): both sources, each entry with its hash links, and Verify now. `GET /fhir/AuditEvent?entity=Patient/{id}` returns the same as FHIR AuditEvent resources.
+- Found and fixed on the way: the Triage API's suggestion endpoint was open to any signed-in user; it is now clinicians only and needs a purpose of use.
+
+Measured: an administrator's `SELECT` on the patient table in psql reached the trail in about 1 s. In the tamper drill the check names the edited entry ("content does not match its hash"), pgAudit shows `DDL ALTER TABLE`, `WRITE UPDATE`, `DDL ALTER TABLE` by role `postgres` on the leader, the chain alert fires about 10 s after the edit and the break-glass alert about 12 s after the read. 64 core tests, including the chain checks under concurrent appends.
+
+Not in the lite profile (documented in the design): the daily signed checkpoint to write-once storage, shipping the gateway access log (layer 1 is in the HAProxy and APISIX container logs), and a separate auditor role (the demo uses `admin1`). The Docker log source can drop a line in flight if the shipper restarts; production tails the PostgreSQL log files with checkpoints. Consent given in the web app is recorded in the consent table's own history rather than by the interceptor (the consent module sits below the audit module); consent given over USSD is in the trail.
 
 ## Demo users (synthetic)
 

@@ -8,7 +8,7 @@ MAVEN := docker run --rm -v "$(CURDIR)/services/core":/w -v teleclinic-m2:/root/
 	-v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
 	--add-host=host.docker.internal:host-gateway maven:3.9.9-eclipse-temurin-21 mvn -B -q $(MVN_NET)
 
-.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition ussd scenario-webhooks clinician logs ps release release-bad switch-back
+.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition ussd scenario-webhooks audit scenario-tamper clinician logs ps release release-bad switch-back
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -58,6 +58,12 @@ ussd: .env ## Scene 1: book for a child from a basic phone (USSD), pay by mobile
 
 scenario-webhooks: .env ## Scene 1c: replay the last payment webhook twice and forge one; nothing changes
 	./scripts/scenarios/duplicate-webhooks.sh
+
+audit: .env ## Scene 5b: purpose and consent enforced, who accessed my record, DBA query captured by pgAudit
+	./scripts/smoke/audit.sh
+
+scenario-tamper: .env ## Scene 5b: a DBA edits an audit row; the hash chain finds it, pgAudit shows who
+	./scripts/scenarios/tamper-audit.sh
 
 clinician: .env ## Scene 2: AI-proposed case, orders refused until FINAL, override, kill switch
 	./scripts/smoke/clinician.sh

@@ -16,7 +16,7 @@ book_and_pay() {  # prints the consultation id
   for i in $(seq 1 20); do [ "$(api "$mom" GET "/api/consultations/$id" | json 'd["state"]')" = QUEUED ] && break; sleep 0.5; done
   echo "$id"
 }
-case_field() { api "$doc" GET "/api/clinician/cases/$1" | json "d['case']['$2']"; }
+case_field() { api "$doc" GET "/api/clinician/cases/$1" "" -H "X-Purpose-Of-Use: TREAT" | json "d['case']['$2']"; }
 
 step "1. Uwase (patient1) books for her daughter Keza with guardian consent, and pays"
 login patient1 "$mom"
@@ -31,7 +31,7 @@ login clinician1 "$doc"
 for i in $(seq 1 30); do st=$(case_field "$id" status); [ "$st" = AI_PROPOSED ] && break; sleep 0.5; done
 [ "$st" = AI_PROPOSED ] || fail "case is $st, expected AI_PROPOSED"
 note "rules $(case_field "$id" rulesUrgency), model $(case_field "$id" modelUrgency) ($(case_field "$id" modelConfidence)), proposed $(case_field "$id" mergedUrgency)"
-note "contributing factors: $(api "$doc" GET "/api/clinician/cases/$id" | json "', '.join(d['case']['contributingFactors'])")"
+note "contributing factors: $(api "$doc" GET "/api/clinician/cases/$id" "" -H "X-Purpose-Of-Use: TREAT" | json "', '.join(d['case']['contributingFactors'])")"
 
 step "2b. the model can raise urgency above the rules (never lower it)"
 eric=$(mktemp); login patient2 "$eric"
@@ -56,7 +56,7 @@ note "$(json 'd["reviewDecision"] + " to " + d["finalUrgency"] + " by " + d["rev
 api "$doc" POST "/api/clinician/consultations/$id/orders" '{"kind":"PRESCRIPTION","detail":"illustrative"}' >/dev/null
 [ "$(status "$doc")" = 201 ] || fail "order after FINAL failed: HTTP $(status "$doc")"
 note "order accepted after FINAL"
-note "provenance: $(api "$doc" GET "/api/clinician/cases/$id" | json "', '.join(p['activity'] + ' by ' + p['agent_id'] for p in d['provenance'])")"
+note "provenance: $(api "$doc" GET "/api/clinician/cases/$id" "" -H "X-Purpose-Of-Use: TREAT" | json "', '.join(p['activity'] + ' by ' + p['agent_id'] for p in d['provenance'])")"
 
 step "5. kill switch: the administrator turns the model off"
 ./scripts/scenarios/model-kill-switch.sh off "drift alert under investigation"
