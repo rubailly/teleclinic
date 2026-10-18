@@ -19,7 +19,7 @@ spring:
       namespace: teleclinic:session
   flyway:
     # One schema per module; modules own their tables (ADR-001)
-    schemas: patient_index,consent,consultation,payments,triage,identity
+    schemas: patient_index,consent,consultation,payments,triage,identity,audit
     default-schema: public
     locations: ${FLYWAY_LOCATIONS:classpath:db/migration}
   kafka:
@@ -77,6 +77,11 @@ logging:
     level: "%5p [cid=%X{correlationId:-}]"
 
 teleclinic:
+  audit:
+    # kafka: entries go through the outbox to audit.events and one writer appends them to the chain (the stack).
+    # direct: appended in the request's own transaction (tests, no Kafka).
+    writer: ${AUDIT_WRITER:kafka}
+    verify-every: ${AUDIT_VERIFY_EVERY:PT30S}
   release:
     color: ${RELEASE_COLOR:local}
     version: ${RELEASE_VERSION:dev}

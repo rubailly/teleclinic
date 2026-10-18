@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
+import rw.teleclinic.core.audit.Actor;
+import rw.teleclinic.core.audit.AuditTrail;
 import rw.teleclinic.core.consent.ConsentService;
 import rw.teleclinic.core.consultation.ConsultationService;
 import rw.teleclinic.core.consultation.ConsultationView;
@@ -42,14 +44,16 @@ class UssdController {
     private final PatientDirectory patients;
     private final ConsentService consents;
     private final ConsultationService consultations;
+    private final AuditTrail audit;
     private final byte[] gatewayKey;
 
     UssdController(PhoneLinks phones, PatientDirectory patients, ConsentService consents,
-                   ConsultationService consultations, ChannelProperties props) {
+                   ConsultationService consultations, AuditTrail audit, ChannelProperties props) {
         this.phones = phones;
         this.patients = patients;
         this.consents = consents;
         this.consultations = consultations;
+        this.audit = audit;
         this.gatewayKey = props.gatewayKey().getBytes(StandardCharsets.UTF_8);
     }
 
@@ -77,6 +81,8 @@ class UssdController {
         PhoneLinks.ChannelSession s = phones.resolve(req.token());
         List<String> purposes = req.aiSupport() ? ConsentService.DEFAULT_PURPOSES : List.of("TREAT", "PAYMENT");
         ConsentService.Consent c = consents.give(s.subject(), req.patientId(), purposes);
+        audit.record(actor(s), "CREATE", "Consent", c.id().toString(), req.patientId(), "PATIENT_ACCESS", "data-subject",
+                "SUCCESS", null, Map.of("channel", "USSD", "purposes", String.join(",", c.purposes())));
         return Map.of("status", c.status(), "performerType", c.performerType(), "purposes", c.purposes());
     }
 
@@ -87,6 +93,8 @@ class UssdController {
         PhoneLinks.ChannelSession s = phones.resolve(req.token());
         ConsultationView c = consultations.book(s.subject(), new ConsultationService.BookingRequest(
                 req.patientId(), "USSD", req.symptoms(), req.durationDays(), false, null), null);
+        audit.record(actor(s), "CREATE", "Consultation", c.id().toString(), req.patientId(), "PATIENT_ACCESS", "data-subject",
+                "SUCCESS", null, Map.of("channel", "USSD"));
         return Map.of("consultationId", c.id(), "urgency", c.urgency(), "advice", c.patientAdvice(), "redFlags", c.redFlags());
     }
 
@@ -108,5 +116,10 @@ class UssdController {
         if (key == null || !MessageDigest.isEqual(gatewayKey, key.getBytes(StandardCharsets.UTF_8))) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "gateway-key", "Unknown caller");
         }
+    }
+
+    /** A USSD caller is the IremboAccount holder behind the linked phone number. */
+    private Actor actor(PhoneLinks.ChannelSession s) {
+        return new Actor(s.subject(), "patient", patients.findBySubject(s.subject()).map(p -> p.displayName()).orElse(null));
     }
 }

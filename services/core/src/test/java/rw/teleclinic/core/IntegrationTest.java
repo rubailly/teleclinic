@@ -33,7 +33,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
         "teleclinic.triage.anonymizer-url=http://127.0.0.1:1",
         "teleclinic.channels.gateway-key=test-gateway-key",
         "teleclinic.notifications.sms-url=http://127.0.0.1:1",
-        "teleclinic.notifications.sms-key=test-gateway-key"
+        "teleclinic.notifications.sms-key=test-gateway-key",
+        // Audit entries go straight to the chain (no Kafka in tests)
+        "teleclinic.audit.writer=direct"
 })
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {

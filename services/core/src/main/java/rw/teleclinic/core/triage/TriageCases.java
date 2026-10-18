@@ -48,6 +48,9 @@ public class TriageCases {
 
     TriageCases(JdbcClient jdbc, ApplicationEventPublisher events, ModelControl models, ObjectMapper json,
                 TriageProperties props) {
+        for (TriageCaseStatus s : TriageCaseStatus.values()) {
+            Metrics.counter("teleclinic.triage.transitions", "to", s.name());
+        }
         this.jdbc = jdbc;
         this.events = events;
         this.models = models;

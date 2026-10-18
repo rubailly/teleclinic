@@ -67,6 +67,13 @@ public class ConsultationService {
     ConsultationService(JdbcClient jdbc, PatientDirectory patients, ConsentService consents, RulesEngine rules,
                         PaymentService payments, CoverageService coverage, TriageCases triage, ApplicationEventPublisher events,
                         ObjectMapper json, ConsultationProperties props) {
+        // Series start at zero so the first booking on a channel shows as an increase
+        for (String channel : new String[] {"WEB", "MOBILE", "USSD", "VOICE"}) {
+            Metrics.counter("teleclinic.consultation.booked", "channel", channel);
+        }
+        for (ConsultationState s : ConsultationState.values()) {
+            Metrics.counter("teleclinic.consultation.transitions", "to", s.name());
+        }
         this.jdbc = jdbc;
         this.patients = patients;
         this.consents = consents;

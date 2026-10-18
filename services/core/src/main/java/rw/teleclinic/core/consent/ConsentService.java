@@ -62,15 +62,30 @@ public class ConsentService {
                         WHERE patient_id = ? AND performer_subject = ? AND status = 'ACTIVE'
                         ORDER BY created_at DESC LIMIT 1""")
                 .param(patientId).param(performerSubject)
-                .query((rs, n) -> new Consent(
-                        rs.getObject("id", UUID.class),
-                        rs.getObject("patient_id", UUID.class),
-                        rs.getString("performer_type"),
-                        rs.getString("performer_subject"),
-                        rs.getString("policy_version"),
-                        List.of((String[]) rs.getArray("purposes").getArray()),
-                        rs.getString("status"),
-                        rs.getTimestamp("created_at").toInstant()))
+                .query(ConsentService::consent)
+                .optional();
+    }
+
+    private static Consent consent(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        return new Consent(
+                rs.getObject("id", UUID.class),
+                rs.getObject("patient_id", UUID.class),
+                rs.getString("performer_type"),
+                rs.getString("performer_subject"),
+                rs.getString("policy_version"),
+                List.of((String[]) rs.getArray("purposes").getArray()),
+                rs.getString("status"),
+                rs.getTimestamp("created_at").toInstant());
+    }
+
+    /** Any active consent for this patient that covers the purpose, whoever gave it (the patient or a guardian). */
+    public Optional<Consent> activeCovering(UUID patientId, String purpose) {
+        return jdbc.sql("""
+                        SELECT * FROM consent.consent
+                        WHERE patient_id = ? AND status = 'ACTIVE' AND ? = ANY(purposes)
+                        ORDER BY created_at DESC LIMIT 1""")
+                .param(patientId).param(purpose)
+                .query(ConsentService::consent)
                 .optional();
     }
 

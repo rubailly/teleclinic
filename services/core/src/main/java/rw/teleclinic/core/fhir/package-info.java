@@ -1,6 +1,6 @@
 /**
- * FHIR facade module. Owns its own tables; other modules reach it only through its public API and domain events.
- * Placeholder in step 1; implemented in later build steps.
+ * FHIR R4 facade (design 4.5): translates the canonical model to FHIR at the boundary. Every clinical read goes
+ * through the audit module's access policy (purpose of use, consent) and is recorded.
  */
 @org.springframework.modulith.ApplicationModule(displayName = "FHIR facade")
 package rw.teleclinic.core.fhir;

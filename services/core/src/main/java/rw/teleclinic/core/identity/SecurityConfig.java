@@ -82,7 +82,9 @@ class SecurityConfig {
                 .requestMatchers("/internal/**").permitAll()
                 // Counts and timings only, scraped by Prometheus on the internal network; blocked at the public edge
                 .requestMatchers("/actuator/prometheus").permitAll()
-                .requestMatchers("/api/clinician/**", "/triage/v1/cases/*/review").hasRole("clinician")
+                .requestMatchers("/api/clinician/**", "/triage/v1/cases/*/review", "/triage/v1/cases/*/suggestion").hasRole("clinician")
+                // The audit trail and its explorer are for auditors (the admin role in the demo realm)
+                .requestMatchers("/api/audit/**", "/fhir/AuditEvent", "/audit/**").hasRole("admin")
                 .requestMatchers("/triage/v1/models/kill-switch", "/triage/v1/models/activate").hasRole("admin")
                 .anyRequest().authenticated())
             .oauth2Login(login -> login

@@ -13,5 +13,7 @@ class StaticPages implements WebMvcConfigurer {
         registry.addViewController("/app/").setViewName("forward:/app/index.html");
         registry.addRedirectViewController("/app", "/app/");
         registry.addViewController("/clinician/").setViewName("forward:/clinician/index.html");
+        registry.addViewController("/audit/").setViewName("forward:/audit/index.html");
+        registry.addRedirectViewController("/audit", "/audit/");
     }
 }

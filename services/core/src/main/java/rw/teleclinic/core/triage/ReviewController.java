@@ -4,13 +4,18 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
+import rw.teleclinic.core.audit.Actor;
+import rw.teleclinic.core.audit.AuditTrail;
+import rw.teleclinic.core.audit.ClinicalAccess;
 
 /**
  * Clinician queue and review (Triage API: suggestion, review, models). Access by role is enforced in
@@ -27,10 +32,14 @@ class ReviewController {
 
     private final TriageCases cases;
     private final ModelControl models;
+    private final ClinicalAccess access;
+    private final AuditTrail audit;
 
-    ReviewController(TriageCases cases, ModelControl models) {
+    ReviewController(TriageCases cases, ModelControl models, ClinicalAccess access, AuditTrail audit) {
         this.cases = cases;
         this.models = models;
+        this.access = access;
+        this.audit = audit;
     }
 
     @GetMapping("/clinician")
@@ -38,8 +47,10 @@ class ReviewController {
         return new org.springframework.web.servlet.view.RedirectView("/clinician/");
     }
 
+    /** The worklist is one search in the audit trail; opening a case is a read of that patient's record. */
     @GetMapping("/api/clinician/queue")
-    Map<String, Object> queue() {
+    Map<String, Object> queue(Authentication who) {
+        audit.record(Actor.of(who), "SEARCH", "TriageCase", null, null, "TREAT", "worklist", "SUCCESS", null, Map.of());
         ModelControl.ModelInfo model = models.active();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model);
@@ -50,19 +61,28 @@ class ReviewController {
     }
 
     @GetMapping("/api/clinician/cases/{id}")
-    Map<String, Object> caseDetail(@PathVariable UUID id) {
-        return Map.of("case", cases.view(id), "provenance", cases.provenance(id));
+    Map<String, Object> caseDetail(Authentication who, @PathVariable UUID id,
+                                   @RequestHeader(value = "X-Purpose-Of-Use", required = false) String purpose,
+                                   @RequestHeader(value = "X-Break-Glass-Reason", required = false) String reason) {
+        UUID patientId = cases.view(id).patientId();
+        return access.read(who, patientId, "TriageCase", id.toString(), purpose, reason,
+                () -> Map.of("case", cases.view(id), "provenance", cases.provenance(id)));
     }
 
     @PostMapping("/api/clinician/cases/{id}/open")
-    TriageCaseView open(@AuthenticationPrincipal OidcUser user, @PathVariable UUID id) {
-        return cases.openForReview(id, user.getFullName());
+    TriageCaseView open(Authentication who, @AuthenticationPrincipal OidcUser user, @PathVariable UUID id) {
+        TriageCaseView v = cases.openForReview(id, user.getFullName());
+        audit.record(Actor.of(who), "UPDATE", "TriageCase", id.toString(), v.patientId(), "TREAT", null, "SUCCESS", null,
+                Map.of("status", v.status()));
+        return v;
     }
 
     /** Triage API: GET /cases/{caseId}/suggestion */
     @GetMapping("/triage/v1/cases/{caseId}/suggestion")
-    Map<String, Object> suggestion(@PathVariable UUID caseId) {
-        TriageCaseView c = cases.view(caseId);
+    Map<String, Object> suggestion(Authentication who, @PathVariable UUID caseId,
+                                   @RequestHeader(value = "X-Purpose-Of-Use", required = false) String purpose) {
+        TriageCaseView c = access.read(who, cases.view(caseId).patientId(), "TriageSuggestion", caseId.toString(),
+                purpose, null, () -> cases.view(caseId));
         Map<String, Object> s = new LinkedHashMap<>();
         s.put("caseId", c.consultationId());
         s.put("status", c.status());
@@ -78,10 +98,13 @@ class ReviewController {
 
     /** Triage API: POST /cases/{caseId}/review (clinician only) */
     @PostMapping("/triage/v1/cases/{caseId}/review")
-    TriageCaseView review(@AuthenticationPrincipal OidcUser user, @PathVariable UUID caseId,
+    TriageCaseView review(Authentication who, @AuthenticationPrincipal OidcUser user, @PathVariable UUID caseId,
                           @RequestBody ReviewDecision decision) {
-        return cases.review(caseId, decision.decision(), decision.finalUrgency(), decision.reason(),
+        TriageCaseView v = cases.review(caseId, decision.decision(), decision.finalUrgency(), decision.reason(),
                 user.getSubject(), user.getFullName());
+        audit.record(Actor.of(who), "DECIDE", "TriageCase", caseId.toString(), v.patientId(), "TREAT", null, "SUCCESS",
+                decision.reason(), Map.of("decision", String.valueOf(v.reviewDecision()), "finalUrgency", String.valueOf(v.finalUrgency())));
+        return v;
     }
 
     @GetMapping("/triage/v1/models/active")

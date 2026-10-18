@@ -45,6 +45,11 @@ public class PaymentService {
 
     PaymentService(JdbcClient jdbc, IremboPayClient irembopay, ApplicationEventPublisher events, ObjectMapper json,
                    PaymentsProperties props) {
+        // Series start at zero so the first duplicate or forged webhook shows as an increase
+        for (WebhookOutcome o : WebhookOutcome.values()) {
+            Metrics.counter("teleclinic.payment.webhooks", "outcome", o.name());
+        }
+        Metrics.counter("teleclinic.payment.webhooks", "outcome", "REJECTED");
         this.jdbc = jdbc;
         this.irembopay = irembopay;
         this.events = events;
