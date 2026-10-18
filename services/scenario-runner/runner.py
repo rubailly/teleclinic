@@ -270,7 +270,7 @@ select json_build_object(
   'lastError', (select last_error from sync.outbound where status = 'PENDING' and last_error is not null order by created_at limit 1),
   'pendingBy', (select coalesce(json_object_agg(target, n), '{}') from (select target, count(*) n from sync.outbound
                 where status = 'PENDING' group by 1) t),
-  'events', (select coalesce(json_agg(e order by e.id desc), '[]') from (select id, to_char(at, 'HH24:MI:SS') at, system, direction,
+  'events', (select coalesce(json_agg(e order by e.id desc), '[]') from (select id, (extract(epoch from at) * 1000)::bigint at, system, direction,
              outcome, teleclinic_id, detail from sync.event order by id desc limit 6) e),
   'identity', (select coalesce(json_object_agg(status, n), '{}') from (select status, count(*) n from matching.candidate group by 1) m),
   'links', (select count(*) from matching.link where active))

@@ -144,7 +144,7 @@ function emr(s) {
       <div class="rbox"><h3>Identity</h3><div class="big">${ident.PENDING || 0} <small>to review</small></div>
         <p>${e.sync?.links || 0} linked · ${ident.BLOCKED || 0} never offered</p></div>
     </div>
-    <table class="emr-events">${(e.sync?.events || []).map((x) => `<tr><td>${esc(x.at)}</td><td>${esc(x.system || "")}</td><td>${esc(x.direction.toLowerCase())}</td>
+    <table class="emr-events">${(e.sync?.events || []).map((x) => `<tr><td>${clock(x.at)}</td><td>${esc(x.system || "")}</td><td>${esc(x.direction.toLowerCase())}</td>
       <td><span class="badge ${x.outcome === "ECHO_DROPPED" ? "b-muted" : x.outcome === "APPLIED" || x.outcome === "CREATED" || x.outcome.includes("LINK") ? "b-ok" : x.outcome === "REVIEW" ? "b-warn" : x.outcome === "BLOCKED" ? "b-bad" : "b-muted"}">${esc(x.outcome.replace("_", " "))}</span></td>
       <td class="muted">${esc(x.detail || "")}</td></tr>`).join("")}</table>`;
 }
