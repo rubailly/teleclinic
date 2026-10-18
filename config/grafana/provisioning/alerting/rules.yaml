@@ -360,3 +360,51 @@ groups:
       runbook_url: http://127.0.0.1:9500/runbooks/audit-chain-broken
       __dashboardUid__: teleclinic-slo
       __panelId__: '29'
+  - uid: emr-sync-backlog
+    title: Writes waiting for the facility EMR
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prom
+      model:
+        refId: A
+        expr: max(teleclinic_sync_outbound_oldest_seconds)
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: dropNN
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 120
+    for: 1m
+    noDataState: OK
+    execErrState: Error
+    isPaused: false
+    labels:
+      severity: warning
+      service: teleclinic
+    annotations:
+      summary: A write to the facility EMR has waited more than 2 minutes (the EMR is offline or rejecting writes).
+      description: Clinicians keep working; the writes are safe in the queue and retried with backoff.
+      runbook_url: http://127.0.0.1:9500/runbooks/emr-sync-backlog
+      __dashboardUid__: teleclinic-slo
+      __panelId__: '36'

@@ -106,3 +106,9 @@ h2 { font-size: 17px; margin: 0; color: var(--slate); font-weight: 800; }
   .clock, .toplink { display: none; }
   .tile { min-width: calc(50% - 5px); flex: 1; }
 }
+
+/* Facility EMR */
+.emr .recon { margin-bottom: 10px; }
+.emr-events { width: 100%; border-collapse: collapse; font-size: 13px; }
+.emr-events td { padding: 5px 6px; border-top: 1px solid var(--line); white-space: nowrap; }
+.emr-events td:last-child { white-space: normal; }

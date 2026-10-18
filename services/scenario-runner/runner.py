@@ -49,6 +49,15 @@ SCENARIOS = [
     {"id": "tamper-audit", "scene": "5b", "title": "Tamper with the audit trail",
      "detail": "A break-glass read, then a DBA rewrites that audit row in psql. Pass: the chain check finds the entry, pgAudit names the role. Held 40 s so the alert fires, then restored.",
      "cmd": ["scripts/scenarios/tamper-audit.sh", "40"], "kind": "security"},
+    {"id": "sync-no-loop", "scene": "3b", "title": "Sync without loops (OpenMRS)",
+     "detail": "Keza's encounter is in OpenMRS once; TeleClinic's own write comes back and is dropped as an echo; a phone edited in OpenMRS arrives once and does not bounce.",
+     "cmd": ["scripts/scenarios/sync-no-loop.sh"], "kind": "sync"},
+    {"id": "identity-review", "scene": "3c", "title": "Identity, safely",
+     "detail": "The worked example goes to a clerk, is linked (national ID offered to OpenMRS) and unlinked (taken back). Different national IDs: never offered. Same UPI: linked automatically.",
+     "cmd": ["scripts/scenarios/identity-review.sh"], "kind": "sync"},
+    {"id": "emr-offline", "scene": "4c", "title": "The facility record goes offline",
+     "detail": "OpenMRS is stopped while two consultations are decided; writes wait with backoff; when it is back they drain in order, one encounter each.",
+     "cmd": ["scripts/scenarios/emr-offline.sh", "30"], "kind": "failure"},
     {"id": "model-off", "scene": "2", "title": "Kill switch: model off",
      "detail": "An administrator switches the triage model off. New cases are rules-only and the clinician queue shows a banner.",
      "cmd": ["scripts/scenarios/model-kill-switch.sh", "off"], "kind": "control"},
@@ -89,7 +98,7 @@ def c(service: str) -> str:
 
 # ---------------------------------------------------------------- live state
 
-state: dict = {"containers": {}, "patroni": None, "etcd": {}, "kafka": None, "edge": None, "pgproxy": None,
+state: dict = {"emr": None, "containers": {}, "patroni": None, "etcd": {}, "kafka": None, "edge": None, "pgproxy": None,
                "model": None, "recon": None, "events": []}
 lock = threading.RLock()  # event() is also called by collectors that already hold it
 probes = {"db": deque(maxlen=480), "edge": deque(maxlen=480)}  # (ms since epoch, ok, latency ms, extra)
@@ -252,6 +261,44 @@ def collect_recon():
                 "rejected": sum(1 for d in deliveries if d.get("status") in (401, 403)),
             },
         }
+
+
+EMR_SQL = """
+select json_build_object(
+  'queue', (select coalesce(json_object_agg(status, n), '{}') from (select status, count(*) n from sync.outbound group by 1) q),
+  'oldestSeconds', (select coalesce(extract(epoch from now() - min(created_at)), 0) from sync.outbound where status = 'PENDING'),
+  'lastError', (select last_error from sync.outbound where status = 'PENDING' and last_error is not null order by created_at limit 1),
+  'events', (select coalesce(json_agg(e order by e.id desc), '[]') from (select id, to_char(at, 'HH24:MI:SS') at, direction, outcome,
+             teleclinic_id, detail from sync.event order by id desc limit 6) e),
+  'identity', (select coalesce(json_object_agg(status, n), '{}') from (select status, count(*) n from matching.candidate group by 1) m),
+  'links', (select count(*) from matching.link where active))
+"""
+
+
+def collect_emr():
+    """The facility EMR side: containers of the teleclinic-emr project, the sync queue and recent sync events."""
+    out = sh(["docker", "ps", "-a", "--filter", "label=com.docker.compose.project=teleclinic-emr",
+              "--format", "{{.Names}}|{{.State}}|{{.Status}}"])
+    services = {}
+    for line in out.splitlines():
+        name, st, status = line.split("|")
+        svc = name.removeprefix("teleclinic-emr-").removesuffix("-1")
+        services[svc] = {"state": st, "health": "healthy" if "(healthy)" in status else "unhealthy" if "unhealthy" in status
+                         else "starting" if "starting" in status else ""}
+    data = None
+    if services:
+        try:
+            with psycopg.connect(DB) as conn:
+                data = conn.execute(EMR_SQL).fetchone()[0]
+        except Exception:
+            data = None
+    with lock:
+        prev = state["emr"]
+        was = (prev or {}).get("services", {}).get("openmrs-backend", {}).get("state")
+        now = services.get("openmrs-backend", {}).get("state")
+        if was and now and was != now:
+            event(f"OpenMRS {'is back' if now == 'running' else 'went offline'}", "ok" if now == "running" else "bad")
+        state["emr"] = {"services": services, "sync": data} if services else None
 
 
 def probe_db():
@@ -477,6 +524,7 @@ if __name__ == "__main__":
     every(1.5, collect_edge)
     every(5, collect_model)
     every(2, collect_recon)
+    every(2, collect_emr)
     threading.Thread(target=probe_db, daemon=True).start()
     threading.Thread(target=probe_edge, daemon=True).start()
     port = int(os.environ.get("PORT", "9500"))

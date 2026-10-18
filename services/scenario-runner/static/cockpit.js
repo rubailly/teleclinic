@@ -123,6 +123,31 @@ function recon(s) {
     <div class="rbox"><h3>Consultations</h3><div class="chips">${states.map(([k, v]) => `<span class="badge ${k === "QUEUED" ? "b-ok" : k === "EXPIRED" ? "b-muted" : "b-violet"}">${esc(k)} ${v}</span>`).join("") || '<span class="muted small">none yet</span>'}</div></div>`;
 }
 
+function emr(s) {
+  const e = s.emr;
+  $("emr-card").hidden = !e;
+  if (!e) return;
+  const svc = (k, label) => {
+    const x = e.services[k] || {};
+    const ok = x.state === "running" && (x.health === "healthy" || x.health === "");
+    return `<div class="rbox"><h3>${label}</h3><div class="big"><span class="dot ${ok ? "" : x.state === "running" ? "warn" : "bad"}"></span>${x.state === "running" ? (x.health || "running") : (x.state || "absent")}</div></div>`;
+  };
+  const q = e.sync?.queue || {};
+  const pending = q.PENDING || 0, dead = q.DEAD || 0;
+  const ident = e.sync?.identity || {};
+  $("emr").innerHTML = `<div class="recon">
+      ${svc("openmrs-backend", "OpenMRS")}
+      ${svc("openfn", "OpenFn Lightning")}
+      <div class="rbox"><h3>Writes to the EMR</h3><div class="big">${pending} <small>waiting</small> · ${dead} <small>dead</small></div>
+        <p>${q.DONE || 0} delivered${pending ? ` · oldest ${Math.round(e.sync.oldestSeconds)} s` : ""}${e.sync?.lastError ? `<br><span class="muted small">${esc(e.sync.lastError.slice(0, 80))}</span>` : ""}</p></div>
+      <div class="rbox"><h3>Identity</h3><div class="big">${ident.PENDING || 0} <small>to review</small></div>
+        <p>${e.sync?.links || 0} linked · ${ident.BLOCKED || 0} never offered</p></div>
+    </div>
+    <table class="emr-events">${(e.sync?.events || []).map((x) => `<tr><td>${esc(x.at)}</td><td>${esc(x.direction.toLowerCase())}</td>
+      <td><span class="badge ${x.outcome === "ECHO_DROPPED" ? "b-muted" : x.outcome === "APPLIED" || x.outcome === "CREATED" || x.outcome.includes("LINK") ? "b-ok" : x.outcome === "REVIEW" ? "b-warn" : x.outcome === "BLOCKED" ? "b-bad" : "b-muted"}">${esc(x.outcome.replace("_", " "))}</span></td>
+      <td class="muted">${esc(x.detail || "")}</td></tr>`).join("")}</table>`;
+}
+
 function events(s) {
   $("events").innerHTML = s.events.length ? s.events.map((e) => `<li><time>${clock(e.at)}</time><span class="${e.level}">${esc(e.text)}</span></li>`).join("")
     : '<li><span></span><span class="muted">Nothing yet. Run a scenario.</span></li>';
@@ -137,7 +162,7 @@ function renderScenarios(busy) {
   rendered = key;
   $("scenarios").innerHTML = scenarios.map((s) => `
     <div class="scn ${last?.run?.scenario === s.id && busy ? "active" : ""}">
-      <div><div class="tags"><span class="badge b-muted">Scene ${esc(s.scene)}</span>${s.kind === "failure" ? '<span class="badge b-bad">failure</span>' : s.kind === "security" ? '<span class="badge b-violet">security</span>' : s.kind === "release" ? '<span class="badge b-ok">release</span>' : ""}</div><b>${esc(s.title)}</b></div>
+      <div><div class="tags"><span class="badge b-muted">Scene ${esc(s.scene)}</span>${s.kind === "failure" ? '<span class="badge b-bad">failure</span>' : s.kind === "security" ? '<span class="badge b-violet">security</span>' : s.kind === "release" ? '<span class="badge b-ok">release</span>' : s.kind === "sync" ? '<span class="badge b-brand">sync</span>' : ""}</div><b>${esc(s.title)}</b></div>
       <button class="run ${s.kind === "failure" ? "failure" : ""}" data-run="${s.id}" ${busy ? "disabled" : ""}>Run</button>
       <p>${esc(s.detail)}</p>
     </div>`).join("");
@@ -182,6 +207,7 @@ async function poll() {
     tiles(s, db, edge);
     nodes(s);
     recon(s);
+    emr(s);
     events(s);
     // Which releases answered the last 10 s of edge probes: one during normal running, two during a canary
     const served = s.probes.edge.filter((p) => p[1] && p[0] > s.now - 10000).map((p) => p[3]);
