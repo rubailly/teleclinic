@@ -232,7 +232,8 @@ def build_event(p: dict, event_type: str) -> dict:
 async def send_event(p: dict, event_type: str, *, event: dict | None = None, secret: bytes = WEBHOOK_SECRET,
                      respect_config: bool = True, label: str = "normal"):
     event = event or build_event(p, event_type)
-    last_event[p["paymentId"]] = event
+    if label == "normal":  # only genuine deliveries can be replayed as duplicates
+        last_event[p["paymentId"]] = event
     if respect_config:
         if config["dropWebhooks"]:
             log.info("webhook %s for %s dropped (scenario: lost webhook)", event["eventId"], p["paymentId"])
