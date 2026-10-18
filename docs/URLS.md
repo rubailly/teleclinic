@@ -12,6 +12,9 @@
 | Grafana SLO dashboard | http://localhost:9700 | Read-only without login; admin password in `.env` |
 | Runbooks | http://127.0.0.1:9500/runbooks/ | One per alert; linked from each alert rule |
 | Prometheus | http://127.0.0.1:9790 | Targets, raw queries. Local only |
+| Identity review (clerk) | http://localhost:9080/clerk/ | Sign in as `clerk1` |
+| OpenMRS O3 (facility EMR) | http://localhost:9880/openmrs/spa | `admin`, password `OPENMRS_ADMIN_PASSWORD` in `.env`; location Demo Health Centre |
+| OpenFn Lightning (sync gateway) | http://localhost:9480 | `admin@teleclinic.local`, password `OPENFN_ADMIN_PASSWORD` in `.env`; run history |
 | Ops cockpit | http://127.0.0.1:9500 | Runs the failure scenarios; live probes, nodes, reconciliation. Local only |
 | USSD phone simulator | http://localhost:9380 | Labelled simulator; demo numbers +250788000001 (Uwase) and +250788000002 (Eric), PIN `1234` |
 | USSD aggregator callback | http://localhost:9380/ussd/callback | Form post: `sessionId`, `phoneNumber`, `serviceCode`, `text` |

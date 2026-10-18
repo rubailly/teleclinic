@@ -20,6 +20,7 @@ Full reasoning is in section 5 of the design document. Do not reverse these with
 | 015 | Tokenisation + data minimisation before the model | Simple, testable; re-identification only in the core |
 | 016 | Hash-chained audit + write-once archive | Tamper evidence with tools the team already runs |
 | 017 | Demo observability: Prometheus + Grafana, metrics only; alert rules and dashboards as code | Lighter than the single LGTM image on a 16 GB host; logs and traces stay documented for production |
+| 018 | Outbound EMR writes: a queue in the core that the OpenFn workflow pulls (started at once by a webhook), not a Kafka trigger | A Kafka trigger consumes events at once even when the EMR is down, so 'writes wait' becomes failed runs; the pulled queue keeps order, backs off and dead-letters |
 
 ## Targets (proposed, replace with measured numbers)
 Availability 99.95%; DB failover under 60 s with zero lost committed writes; USSD step p95 under 1.5 s; rules p95 under 100 ms; sync lag p95 under 5 s; DR RTO under 4 h and RPO under 5 min.

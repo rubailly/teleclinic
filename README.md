@@ -14,6 +14,10 @@ make scenario-kill-db-leader      # kill the Postgres leader under writes
 make scenario-kill-kafka-broker   # stop one Kafka broker
 make scenario-partition           # cut the leader's node off the network, then heal
 make scenario-webhooks            # replay the last payment webhook twice and forge one
+make emr-up      # once: OpenMRS O3 and the OpenFn sync gateway (first start about 4 minutes; kept across resets)
+make scenario-sync                # Scene 3b: encounter in OpenMRS once, echoes dropped, an EMR phone edit applied once
+make scenario-identity            # Scene 3c: review, link, unlink with national ID write-back; hard block; UPI auto-link
+make scenario-emr-offline         # Scene 4c: OpenMRS down while consultations complete; the backlog drains once each
 make audit       # purpose of use and consent enforced, who accessed my record, DBA query captured by pgAudit
 make scenario-tamper              # a DBA edits an audit row; the hash chain finds it, pgAudit names the role
 make release     # release v1.5 to the idle colour: 1, 10, 50, 100% under load, gated
@@ -42,6 +46,9 @@ Requirements: Docker with Compose v2, `make`, `curl`. Nothing else needs to be i
 | **Keycloak** | **Labelled stand-in for IremboAccount** |
 | **irembopay-mock** | **Labelled stand-in for IremboPay and for the national insurance coverage check** |
 | USSD gateway (menus, sessions in Valkey, one page per step) | Real |
+| OpenMRS O3 (reference application 3.7, no demo data) as the facility EMR | Real; its patients are synthetic |
+| OpenFn Lightning and worker as the sync gateway (two workflows) | Real |
+| Sync queue, ledger, echo suppression, identity matching and clerk review in the core | Real |
 | Audit: interceptor, purpose-of-use and consent policy, pgAudit, hash chain, explorer | Real |
 | Log shipper (Vector) for pgAudit lines | Real |
 | Prometheus and Grafana (SLO dashboard, 5 alert rules, runbooks) | Real |
@@ -161,6 +168,18 @@ Measured: killing the database leader from the cockpit, the alert fired 17 s aft
 Measured: an administrator's `SELECT` on the patient table in psql reached the trail in about 1 s. In the tamper drill the check names the edited entry ("content does not match its hash"), pgAudit shows `DDL ALTER TABLE`, `WRITE UPDATE`, `DDL ALTER TABLE` by role `postgres` on the leader, the chain alert fires about 10 s after the edit and the break-glass alert about 12 s after the read. 64 core tests, including the chain checks under concurrent appends.
 
 Not in the lite profile (documented in the design): the daily signed checkpoint to write-once storage, shipping the gateway access log (layer 1 is in the HAProxy and APISIX container logs), and a separate auditor role (the demo uses `admin1`). The Docker log source can drop a line in flight if the shipper restarts; production tails the PostgreSQL log files with checkpoints. Consent given in the web app is recorded in the consent table's own history rather than by the interceptor (the consent module sits below the audit module); consent given over USSD is in the trail.
+
+## Built so far: facility EMR sync and identity matching (Task 2)
+
+- **OpenMRS O3 and OpenFn** run as their own Compose project (`make emr-up`, once). OpenMRS needs minutes to initialise an empty database, so `make reset` does not restart it: it puts the facility's demo data back to the seed through the REST API in seconds. The core works without it, which is also how it behaves when an EMR is offline.
+- **Outbound.** A clinician's final decision queues the encounter (only if the patient's consent covers treatment). The core calls the gateway's webhook so a run starts at once; a one-minute schedule is the safety net. The OpenFn workflow does a conditional create: it finds the patient by the TeleClinic ID on the OpenMRS record (unique there), else by UPI or national ID (and adopts that record), else creates it; it writes the encounter only if none carries the consultation id. Retries back off exponentially with jitter; after 10 failures a write is a dead letter that can be replayed.
+- **Inbound and no loops.** A second workflow polls OpenMRS's FHIR API with `_lastUpdated` and delivers each changed patient to `POST /sync/inbound`. The ledger keeps ids, the EMR version and a content hash per record: TeleClinic's own write coming back has the same hash and is dropped as an echo (200); a contact phone changed in OpenMRS (EMR-authoritative) is applied once, audited, and not sent back (202).
+- **Identity matching.** OpenMRS records TeleClinic does not know are blocked and scored against the patient index (names token by token, birth date exact or day and month swapped, sex, phone, UPI, national ID). Two strong identifiers agreeing (national ID, UPI, exact name with exact birth date) link automatically; the middle band goes to a clerk (`/clerk/`, `clerk1`) with side-by-side evidence; different national IDs are a hard block. A link offers the national ID to OpenMRS; an unlink takes it back. Links, never merges; every decision is audited.
+- **Seen in OpenMRS:** the facility's nurse signs in at "Demo Health Centre" (http://localhost:9880/openmrs/spa); the patient header shows the TeleClinic ID and UPI, and the teleconsultation is under All encounters.
+
+Measured: decision to encounter in OpenMRS, median 1.8 s and p95 2.3 s (target p95 under 5 s); with OpenMRS stopped, writes waited and arrived once each after it came back (81 s for a 30 s outage plus OpenMRS's 48 s restart); the facility's four seeded records landed in the expected bands (review, blocked, automatic link, no match).
+
+Known limits: OpenMRS's FHIR `_lastUpdated` reports an edited phone but not one added where there was none (production adds a periodic reconciliation sweep of linked records by hash); the gateway writes teleconsultations as encounters without a visit (O3 lists them under All encounters, not Visits); conflicts on TeleClinic-authored fields are logged, not yet queued for a human.
 
 ## Demo users (synthetic)
 

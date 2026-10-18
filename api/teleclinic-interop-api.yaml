@@ -157,6 +157,16 @@ paths:
             application/fhir+json:
               schema: {$ref: '#/components/schemas/FhirResource'}
   /identity/links:
+    get:
+      tags: [Identity]
+      summary: Active links, automatic and decided by a clerk
+      security: [{oidc: [system/Identity.review]}]
+      responses:
+        '200':
+          description: Active links with the TeleClinic patient and the identifiers offered to the EMR record
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
     post:
       tags: [Identity]
       summary: Record a link decision between two patient records
@@ -191,6 +201,33 @@ paths:
       responses:
         '200':
           description: Page of candidate pairs with side-by-side evidence
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/ReviewItem'}}
+  /identity/review-queue/{candidateId}/dismiss:
+    post:
+      tags: [Identity]
+      summary: Not the same person. The pair leaves the queue; the decision is audited
+      parameters:
+        - {name: candidateId, in: path, required: true, schema: {type: string}}
+      security: [{oidc: [system/Identity.write]}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: {type: string}
+      responses:
+        '204': {description: Dismissed and audited}
+  /identity/blocked:
+    get:
+      tags: [Identity]
+      summary: Pairs never offered for linking (both records carry a national ID and they differ)
+      security: [{oidc: [system/Identity.review]}]
+      responses:
+        '200':
+          description: Blocked pairs, with the same side-by-side shape as the review queue
           content:
             application/json:
               schema: {type: array, items: {$ref: '#/components/schemas/ReviewItem'}}
