@@ -206,7 +206,10 @@ public class TriageCases {
         detail.put("modelUrgency", c.get("model_urgency"));
         detail.put("modelVersion", c.get("model_version"));
         provenance(consultationId, "CLINICIAN_REVIEW", "PRACTITIONER", reviewerSubject, detail);
-        return view(consultationId);
+        TriageCaseView finalView = view(consultationId);
+        events.publishEvent(new TriageFinalised(consultationId, finalView.patientId(), finalView.channel(), chosen.name(),
+                decision, reason, reviewerName, Instant.now()));
+        return finalView;
     }
 
     /** Paid cases waiting for a clinician, most urgent first, then oldest first. */

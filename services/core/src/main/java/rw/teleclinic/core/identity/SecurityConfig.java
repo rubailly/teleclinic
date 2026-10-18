@@ -85,6 +85,11 @@ class SecurityConfig {
                 .requestMatchers("/api/clinician/**", "/triage/v1/cases/*/review", "/triage/v1/cases/*/suggestion").hasRole("clinician")
                 // The audit trail and its explorer are for auditors (the admin role in the demo realm)
                 .requestMatchers("/api/audit/**", "/fhir/AuditEvent", "/audit/**").hasRole("admin")
+                // Identity review (clerks); the sync ledger is for administrators
+                .requestMatchers("/identity/**", "/clerk/**").hasAnyRole("clerk", "admin")
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/sync/ledger/**").hasRole("admin")
+                // The sync gateway authenticates with its key (stand-in for client credentials), not a session
+                .requestMatchers("/sync/inbound").permitAll()
                 .requestMatchers("/triage/v1/models/kill-switch", "/triage/v1/models/activate").hasRole("admin")
                 .anyRequest().authenticated())
             .oauth2Login(login -> login
@@ -96,7 +101,7 @@ class SecurityConfig {
             .csrf(csrf -> csrf
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 .csrfTokenRequestHandler(eagerCsrfToken())
-                .ignoringRequestMatchers("/webhooks/**", "/internal/**"))
+                .ignoringRequestMatchers("/webhooks/**", "/internal/**", "/sync/inbound"))
             // APIs answer 401 instead of redirecting, so the apps can start the login themselves
             .exceptionHandling(e -> e.defaultAuthenticationEntryPointFor(
                     new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), new AntPathRequestMatcher("/api/**")));
