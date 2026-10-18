@@ -217,7 +217,7 @@ Known limits: the eBuzima stand-in models what is public about eBuzima (Frappe, 
 
 ## Ports
 
-See `docs/URLS.md`.
+See `docs/URLS.md`. To run the stack on a shared server reached by its address, see `docs/SERVER.md`.
 
 ## Memory (measured after step 2)
 
