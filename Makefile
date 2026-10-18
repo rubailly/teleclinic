@@ -87,13 +87,13 @@ audit: .env ## Scene 5b: purpose and consent enforced, who accessed my record, D
 scenario-tamper: .env ## Scene 5b: a DBA edits an audit row; the hash chain finds it, pgAudit shows who
 	./scripts/scenarios/tamper-audit.sh
 
-scenario-sync: .env ## Scene 3b: Keza's encounter in OpenMRS once, echoes dropped, a phone edited in OpenMRS applied once
+scenario-sync: .env ## Scene 3b: Keza's encounter in eBuzima once (Kimironko's tenant), echoes dropped, a nurse's phone edit applied once
 	./scripts/scenarios/sync-no-loop.sh
 
 scenario-identity: .env ## Scene 3c: review, link and unlink with national ID write-back; hard block; UPI auto-link
 	./scripts/scenarios/identity-review.sh
 
-scenario-emr-offline: .env ## Scene 4c: OpenMRS down while consultations complete; the backlog drains once each
+scenario-emr-offline: .env ## Scene 4c: the district hospital's OpenMRS down while consultations complete; the backlog drains once each
 	./scripts/scenarios/emr-offline.sh
 
 clinician: .env ## Scene 2: AI-proposed case, orders refused until FINAL, override, kill switch

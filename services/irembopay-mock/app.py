@@ -21,7 +21,7 @@ from html import escape
 
 import httpx
 from fastapi import FastAPI, Form, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://localhost:9280").rstrip("/")
 WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"].encode()
@@ -56,6 +56,12 @@ def sign(body: bytes, secret: bytes = WEBHOOK_SECRET, ts: int | None = None) -> 
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "irembopay-mock", "label": "MOCK, not the real IremboPay"}
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    # Browsers ask for it on the hosted checkout; the mock has no icon
+    return Response(status_code=204)
 
 
 @app.post("/v1/payments", status_code=201)

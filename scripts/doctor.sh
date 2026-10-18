@@ -43,10 +43,15 @@ emr_check() {  # optional part of the stack: report, never fail, when it is not 
   curl -fsS --max-time 5 -u "admin:$OPENMRS_ADMIN_PASSWORD" http://localhost:9880/openmrs/ws/rest/v1/session | grep -q '"authenticated":true' \
     || { echo "OpenMRS REST API not answering"; return 1; }
   curl -fsS --max-time 3 http://localhost:9480/health_check >/dev/null || { echo "Lightning not answering"; return 1; }
+  # No health check of their own, and sync stops quietly without them: eBuzima's webhook push runs on its worker,
+  # every workflow run on the OpenFn worker
+  local w; for w in ebuzima-worker openfn-worker; do
+    [ "$(docker inspect -f '{{.State.Running}}' teleclinic-emr-$w-1 2>/dev/null)" = true ] || { echo "$w is not running"; return 1; }
+  done
   local wf; wf=$(curl -fsS --max-time 5 -H "Authorization: Bearer $OPENFN_API_TOKEN" http://localhost:9480/api/workflows \
     | python3 -c "import json,sys; print(len(json.load(sys.stdin)['workflows']))" 2>/dev/null)
   [ "${wf:-0}" -ge 4 ] || { echo "sync workflows not deployed (make emr-up)"; return 1; }
-  echo "eBuzima up, OpenMRS up, Lightning up, $wf workflows"
+  echo "eBuzima up, OpenMRS up, Lightning and both workers up, $wf workflows"
 }
 sync_queue() {
   if ! docker ps --format '{{.Names}}' | grep -q '^teleclinic-emr-'; then echo "EMR not running"; return 0; fi
