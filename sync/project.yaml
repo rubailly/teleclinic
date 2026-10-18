@@ -1,0 +1,34 @@
+# The sync gateway (design 4.5.2): two OpenFn workflows between TeleClinic and a facility OpenMRS.
+# Deployed by scripts/emr/bootstrap.py through Lightning's provisioning API; ids are derived from these keys, so a
+# redeploy updates in place. One run at a time per workflow.
+name: teleclinic-sync
+description: TeleClinic and the demo facility's OpenMRS, both ways, without loops
+workflows:
+  outbound:
+    name: TeleClinic to OpenMRS
+    triggers:
+      kick: {type: webhook}                              # the core calls this when it queues work
+      schedule: {type: cron, cron_expression: '* * * * *'}   # safety net, every minute
+    jobs:
+      due: {name: Take due writes from TeleClinic, adaptor: '@openfn/language-http@7.3.3', credential: TeleClinic core, body: jobs/outbound-1-due.js}
+      write: {name: Write to OpenMRS, adaptor: '@openfn/language-http@7.3.3', credential: OpenMRS, body: jobs/outbound-2-write.js}
+      report: {name: Report results to TeleClinic, adaptor: '@openfn/language-http@7.3.3', credential: TeleClinic core, body: jobs/outbound-3-report.js}
+    edges:
+      - {from_to: kick -> due}
+      - {from_to: schedule -> due}
+      - {from_to: due -> write, condition: js_expression, expression: 'state.items && state.items.length > 0', label: work to do}
+      - {from_to: write -> report}
+  inbound:
+    name: OpenMRS to TeleClinic
+    triggers:
+      kick: {type: webhook}
+      schedule: {type: cron, cron_expression: '* * * * *'}
+    jobs:
+      since: {name: Where to start, adaptor: '@openfn/language-http@7.3.3', credential: TeleClinic core, body: jobs/inbound-1-since.js}
+      fetch: {name: Changed patients in OpenMRS, adaptor: '@openfn/language-http@7.3.3', credential: OpenMRS, body: jobs/inbound-2-fetch.js}
+      deliver: {name: Deliver to TeleClinic, adaptor: '@openfn/language-http@7.3.3', credential: TeleClinic core, body: jobs/inbound-3-deliver.js}
+    edges:
+      - {from_to: kick -> since}
+      - {from_to: schedule -> since}
+      - {from_to: since -> fetch}
+      - {from_to: fetch -> deliver}

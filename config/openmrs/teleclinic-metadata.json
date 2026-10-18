@@ -1,0 +1,12 @@
+{
+  "teleclinicIdType": "eb3b4bbc-d4f9-5ad8-90d3-e03062c5f39f",
+  "nationalIdType": "8cb8a5b6-e6ee-5ed1-8832-4a4730722d19",
+  "upiType": "466c8fe2-e4e8-56f1-bbdc-bdab1c3d428d",
+  "encounterType": "b61c9e8f-ec18-5bdb-9f89-d97cd75f30e2",
+  "location": "289c0c8e-fc33-567b-a3ce-9d2d997769f3",
+  "urgencyConcept": "30a61813-fdb2-5f9a-adea-bc01613ef5ea",
+  "decisionConcept": "68c0144f-0168-5b35-9520-9e519add6b61",
+  "referenceConcept": "d2d722a6-0ea7-51be-ab7b-8f0c673e0093",
+  "phoneAttribute": "14d4f066-15f5-102d-96e4-000c29c2a5d7",
+  "facilityLocation": "8404902a-a077-59db-b27b-2e45c5d4ec9b"
+}

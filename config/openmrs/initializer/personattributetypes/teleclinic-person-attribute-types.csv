@@ -1,0 +1,2 @@
+Uuid,Void/Retire,Name,Description,Format,Foreign uuid,Searchable,_order:1000
+14d4f066-15f5-102d-96e4-000c29c2a5d7,,Telephone Number,Contact phone (EMR-authoritative; synchronised to TeleClinic),java.lang.String,,TRUE,

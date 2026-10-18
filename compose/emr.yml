@@ -1,0 +1,160 @@
+# Facility EMR (OpenMRS O3) and the sync gateway (OpenFn Lightning and its worker).
+# A separate, long-lived Compose project (make emr-up): OpenMRS takes minutes to initialise an empty database, so
+# `make reset` does not restart it; it puts the EMR's demo data back to its seed state through the REST API instead.
+# The core works without it, which is also how it behaves when a facility EMR is offline.
+name: teleclinic-emr
+
+x-initializer: &initializer
+  # TeleClinic's metadata, beside the distribution's own configuration (nothing upstream is replaced)
+  - openmrs-data:/openmrs/data
+  - ./config/openmrs/initializer/patientidentifiertypes:/openmrs/distribution/openmrs_config/patientidentifiertypes/teleclinic:ro
+  - ./config/openmrs/initializer/encountertypes:/openmrs/distribution/openmrs_config/encountertypes/teleclinic:ro
+  - ./config/openmrs/initializer/locations:/openmrs/distribution/openmrs_config/locations/teleclinic:ro
+  - ./config/openmrs/initializer/concepts:/openmrs/distribution/openmrs_config/concepts/teleclinic:ro
+  - ./config/openmrs/initializer/personattributetypes:/openmrs/distribution/openmrs_config/personattributetypes/teleclinic:ro
+
+services:
+  # Routes /openmrs/spa to the O3 frontend and /openmrs to the backend
+  openmrs:
+    image: openmrs/openmrs-reference-application-3-gateway:3.7.x@sha256:8a8c78d6d974d3e071a6e29eb4679b4c84367c58ad16bb8b7dbe0d0a2234a14f
+    restart: unless-stopped
+    ports:
+      - "9880:80"   # OpenMRS O3: http://localhost:9880/openmrs/spa
+    depends_on:
+      openmrs-frontend: {condition: service_started}
+      openmrs-backend: {condition: service_healthy}
+    mem_limit: 64m
+    networks: [emr]
+
+  openmrs-frontend:
+    image: openmrs/openmrs-reference-application-3-frontend:3.7.x@sha256:4cace305966a8b6c23f07b92b83e072e4c4333df8244241469ce8c627241239a
+    restart: unless-stopped
+    environment:
+      SPA_PATH: /openmrs/spa
+      API_URL: /openmrs
+      SPA_CONFIG_URLS: /openmrs/spa/config-core_demo.json
+    mem_limit: 256m
+    networks:
+      emr: {aliases: [frontend]}
+
+  openmrs-backend:
+    image: openmrs/openmrs-reference-application-3-backend:3.7.x-no-demo@sha256:b5c1cf42283bd3a4b8ead3f0c3b165a7190807a463343f3222a6a3fcd4be7943
+    restart: unless-stopped
+    environment:
+      OMRS_CONFIG_MODULE_WEB_ADMIN: "true"
+      OMRS_CONFIG_AUTO_UPDATE_DATABASE: "true"
+      OMRS_CONFIG_CREATE_TABLES: "true"
+      OMRS_CONFIG_CONNECTION_SERVER: openmrs-db
+      OMRS_CONFIG_CONNECTION_DATABASE: openmrs
+      OMRS_CONFIG_CONNECTION_USERNAME: openmrs
+      OMRS_CONFIG_CONNECTION_PASSWORD: ${OPENMRS_DB_PASSWORD}
+    volumes: *initializer
+    depends_on:
+      openmrs-db: {condition: service_healthy}
+    # Healthy once the REST API authenticates, not when the setup wizard answers
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs -u admin:${OPENMRS_ADMIN_PASSWORD} http://localhost:8080/openmrs/ws/rest/v1/session | grep -q '\"authenticated\":true'"]
+      interval: 15s
+      timeout: 10s
+      retries: 240
+      start_period: 120s
+    mem_limit: 2g
+    networks:
+      emr: {aliases: [backend]}
+
+  openmrs-db:
+    image: mariadb:10.11.7
+    restart: unless-stopped
+    command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_general_ci"]
+    environment:
+      MYSQL_DATABASE: openmrs
+      MYSQL_USER: openmrs
+      MYSQL_PASSWORD: ${OPENMRS_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${OPENMRS_DB_ROOT_PASSWORD}
+    volumes:
+      - openmrs-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    mem_limit: 512m
+    networks: [emr]
+
+  # OpenFn Lightning: the sync gateway's workflows (sync/), run by the worker
+  openfn:
+    image: openfn/lightning:v2.19.0
+    restart: unless-stopped
+    # The image does not migrate on boot; migrations are idempotent, so run them on every start
+    command: ["sh", "-c", "/app/bin/migrate && exec /app/bin/server"]
+    environment:
+      DATABASE_URL: postgresql://lightning:${OPENFN_DB_PASSWORD}@openfn-db:5432/lightning
+      DISABLE_DB_SSL: "true"
+      LISTEN_ADDRESS: 0.0.0.0
+      PORT: "4000"
+      URL_SCHEME: http
+      URL_HOST: localhost
+      URL_PORT: "9480"
+      ORIGINS: http://localhost:9480
+      SECRET_KEY_BASE: ${OPENFN_SECRET_KEY_BASE}
+      PRIMARY_ENCRYPTION_KEY: ${OPENFN_ENCRYPTION_KEY}
+      WORKER_SECRET: ${OPENFN_WORKER_SECRET}
+      WORKER_RUNS_PRIVATE_KEY: ${OPENFN_WORKER_RUNS_PRIVATE_KEY}
+      LOG_LEVEL: info
+    ports:
+      - "9480:4000"   # Lightning: http://localhost:9480 (runs, history)
+    depends_on:
+      openfn-db: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:4000/health_check || wget -qO- http://localhost:4000/health_check || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 768m
+    # The core posts here to start a sync run as soon as there is work
+    networks:
+      emr: {}
+      interop: {aliases: [openfn]}
+
+  openfn-worker:
+    image: openfn/ws-worker:v1.29.4
+    restart: unless-stopped
+    environment:
+      WORKER_LIGHTNING_SERVICE_URL: ws://openfn:4000/worker
+      WORKER_SECRET: ${OPENFN_WORKER_SECRET}
+      WORKER_LOG_LEVEL: info
+    depends_on:
+      openfn: {condition: service_healthy}
+    mem_limit: 768m
+    # Reaches OpenMRS on the EMR network and the core (through HAProxy) on the interop network
+    networks: [emr, interop]
+
+  openfn-db:
+    image: postgres:16.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lightning
+      POSTGRES_USER: lightning
+      POSTGRES_PASSWORD: ${OPENFN_DB_PASSWORD}
+    volumes:
+      - openfn-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lightning -d lightning"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 256m
+    networks: [emr]
+
+networks:
+  emr: {}
+  # Shared with the main project (HAProxy and the core); created by `make emr-up` and `make up-lite`
+  interop:
+    name: teleclinic-interop
+    external: true
+
+volumes:
+  openmrs-data:
+  openmrs-db-data:
+  openfn-db-data:

@@ -1,0 +1,4 @@
+Uuid,Void/Retire,Same as mappings,Fully specified name:en,Short name:en,Description:en,Data class,Data type,_version:1,_order:1000
+30a61813-fdb2-5f9a-adea-bc01613ef5ea,,,TeleClinic triage urgency,Triage urgency,Final triage urgency decided by a TeleClinic clinician,Misc,Text,,
+68c0144f-0168-5b35-9520-9e519add6b61,,,TeleClinic clinician decision,Clinician decision,How the clinician decided (confirmed or overridden) and why,Misc,Text,,
+d2d722a6-0ea7-51be-ab7b-8f0c673e0093,,,TeleClinic consultation reference,Consultation reference,TeleClinic consultation id; makes the encounter write idempotent,Misc,Text,,

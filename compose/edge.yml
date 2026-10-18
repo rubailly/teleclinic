@@ -20,7 +20,8 @@ services:
       retries: 10
     mem_limit: 128m
     restart: unless-stopped
-    networks: [teleclinic]
+    # interop: the sync gateway (OpenFn) reaches the core pool here, like any other internal caller
+    networks: [teleclinic, interop]
 
   apisix:
     image: apache/apisix:3.11.0-debian
@@ -68,5 +69,9 @@ services:
     networks: [teleclinic]
 
 networks:
+  # Shared with the EMR project (compose/emr.yml); created by make up-lite and make emr-up
+  interop:
+    name: teleclinic-interop
+    external: true
   teleclinic:
     name: teleclinic

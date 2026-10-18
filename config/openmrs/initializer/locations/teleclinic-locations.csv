@@ -1,0 +1,3 @@
+Uuid,Void/Retire,Name,Description,Parent,Tag|Login Location,Tag|Visit Location,_order:1000
+289c0c8e-fc33-567b-a3ce-9d2d997769f3,,TeleClinic (virtual),Teleconsultations by TeleClinic clinicians,,FALSE,TRUE
+8404902a-a077-59db-b27b-2e45c5d4ec9b,,Demo Health Centre,The demo facility whose OpenMRS TeleClinic synchronises with (synthetic),,TRUE,TRUE,

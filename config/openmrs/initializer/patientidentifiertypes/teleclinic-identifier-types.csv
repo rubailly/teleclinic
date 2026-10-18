@@ -1,0 +1,4 @@
+Uuid,Void/Retire,Name,Description,Required,Format,Format description,Validator,Location behavior,Uniqueness behavior
+eb3b4bbc-d4f9-5ad8-90d3-e03062c5f39f,,TeleClinic ID,TeleClinic patient id (set by the sync gateway),FALSE,,,,NOT_USED,UNIQUE
+8cb8a5b6-e6ee-5ed1-8832-4a4730722d19,,National ID (NIDA),Rwandan national ID; synthetic in this demo,FALSE,,,,NOT_USED,UNIQUE
+466c8fe2-e4e8-56f1-bbdc-bdab1c3d428d,,UPI,Unique patient identifier from the national client registry,FALSE,,,,NOT_USED,UNIQUE

@@ -8,7 +8,7 @@ MAVEN := docker run --rm -v "$(CURDIR)/services/core":/w -v teleclinic-m2:/root/
 	-v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
 	--add-host=host.docker.internal:host-gateway maven:3.9.9-eclipse-temurin-21 mvn -B -q $(MVN_NET)
 
-.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition ussd scenario-webhooks audit scenario-tamper clinician logs ps release release-bad switch-back
+.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition ussd scenario-webhooks audit scenario-tamper scenario-sync scenario-identity scenario-emr-offline clinician logs ps release release-bad switch-back interop-network emr-up emr-down emr-wipe emr-reset
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -16,7 +16,7 @@ help: ## List targets
 .env:
 	cp .env.example .env
 
-up-lite: .env ## Build and start the lite profile, wait until healthy
+up-lite: .env interop-network ## Build and start the lite profile, wait until healthy
 	$(COMPOSE) up -d --build --wait
 	@# The next release (green v1.5) is built now, so the release scene does not wait for a build
 	$(COMPOSE) --profile release build -q core-green
@@ -26,10 +26,32 @@ up-lite: .env ## Build and start the lite profile, wait until healthy
 down: .env ## Stop everything (keeps volumes)
 	$(COMPOSE) --profile release down
 
-reset: .env ## Back to a known state: remove containers and volumes, start again
+reset: .env ## Back to a known state: remove containers and volumes, start again (the EMR's demo data too, if it runs)
 	@# Data is thrown away, so there is no point waiting for graceful shutdowns
 	$(COMPOSE) --profile release down -v -t 1 --remove-orphans
+	@# The EMR stays up (it takes minutes to initialise); its demo data goes back to the seed in seconds, while the core
+	@# is down, so the first poll after the reset reads the fresh seed
+	@if docker ps --format '{{.Names}}' | grep -q '^teleclinic-emr-openmrs-backend-1$$'; then python3 scripts/emr/seed.py --reset; fi
 	$(MAKE) up-lite
+
+interop-network:
+	@docker network inspect teleclinic-interop >/dev/null 2>&1 || docker network create teleclinic-interop >/dev/null
+
+EMR := docker compose --project-directory . --env-file .env -f compose/emr.yml
+
+emr-up: interop-network ## Start OpenMRS and the sync gateway (OpenFn), then configure both (first start: about 4 minutes)
+	python3 scripts/emr/env.py
+	$(EMR) up -d --wait
+	python3 scripts/emr/bootstrap.py
+
+emr-down: ## Stop OpenMRS and the sync gateway (data kept)
+	$(EMR) down -t 20
+
+emr-wipe: ## Remove OpenMRS and the sync gateway with all their data (next emr-up starts from empty)
+	$(EMR) down -v -t 5
+
+emr-reset: ## Put the EMR's demo data back to the seed (seconds; done by make reset too)
+	python3 scripts/emr/seed.py --reset
 
 doctor: .env ## Check every health endpoint
 	./scripts/doctor.sh
@@ -64,6 +86,15 @@ audit: .env ## Scene 5b: purpose and consent enforced, who accessed my record, D
 
 scenario-tamper: .env ## Scene 5b: a DBA edits an audit row; the hash chain finds it, pgAudit shows who
 	./scripts/scenarios/tamper-audit.sh
+
+scenario-sync: .env ## Scene 3b: Keza's encounter in OpenMRS once, echoes dropped, a phone edited in OpenMRS applied once
+	./scripts/scenarios/sync-no-loop.sh
+
+scenario-identity: .env ## Scene 3c: review, link and unlink with national ID write-back; hard block; UPI auto-link
+	./scripts/scenarios/identity-review.sh
+
+scenario-emr-offline: .env ## Scene 4c: OpenMRS down while consultations complete; the backlog drains once each
+	./scripts/scenarios/emr-offline.sh
 
 clinician: .env ## Scene 2: AI-proposed case, orders refused until FINAL, override, kill switch
 	./scripts/smoke/clinician.sh
