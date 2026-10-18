@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Scene 4c: the facility record goes offline. Clinicians keep working; writes wait in the queue with backoff; when
-# OpenMRS is back the backlog drains in order, each encounter exactly once. Usage: emr-offline.sh [seconds offline]
+# Scene 4c: a hospital's EMR goes offline. Eric is followed at Kibagabaga District Hospital, which runs its own OpenMRS.
+# Clinicians keep working; writes wait in the queue with backoff; when OpenMRS is back the backlog drains in order,
+# each encounter exactly once. Other EMRs (eBuzima) are not held up: the queue is per EMR. Usage: emr-offline.sh [seconds offline]
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 set -a; source .env; set +a
@@ -13,7 +14,7 @@ ERIC=10000000-0000-4000-b000-000000000002
 eric=$(mktemp); doc=$(mktemp); trap 'rm -f "$eric" "$doc" "$eric.status" "$doc.status"; docker start teleclinic-emr-openmrs-backend-1 >/dev/null 2>&1 || true' EXIT
 login patient2 "$eric"; login clinician1 "$doc"
 
-step "1. OpenMRS goes offline"
+step "1. Kibagabaga District Hospital's OpenMRS goes offline"
 docker stop -t 5 teleclinic-emr-openmrs-backend-1 >/dev/null
 t_down=$(date +%s)
 note "stopped at $(date -u +%T) UTC"

@@ -26,10 +26,10 @@ up-lite: .env interop-network ## Build and start the lite profile, wait until he
 down: .env ## Stop everything (keeps volumes)
 	$(COMPOSE) --profile release down
 
-reset: .env ## Back to a known state: remove containers and volumes, start again (the EMR's demo data too, if it runs)
+reset: .env ## Back to a known state: remove containers and volumes, start again (the EMRs' demo data too, if they run)
 	@# Data is thrown away, so there is no point waiting for graceful shutdowns
 	$(COMPOSE) --profile release down -v -t 1 --remove-orphans
-	@# The EMR stays up (it takes minutes to initialise); its demo data goes back to the seed in seconds, while the core
+	@# The EMRs stay up (they take minutes to initialise); their demo data goes back to the seed in seconds, while the core
 	@# is down, so the first poll after the reset reads the fresh seed
 	@if docker ps --format '{{.Names}}' | grep -q '^teleclinic-emr-openmrs-backend-1$$'; then python3 scripts/emr/seed.py --reset; fi
 	$(MAKE) up-lite
@@ -39,18 +39,18 @@ interop-network:
 
 EMR := docker compose --project-directory . --env-file .env -f compose/emr.yml
 
-emr-up: interop-network ## Start OpenMRS and the sync gateway (OpenFn), then configure both (first start: about 4 minutes)
+emr-up: interop-network ## Start eBuzima, OpenMRS and the sync gateway (OpenFn), then configure them (first start: about 5 minutes)
 	python3 scripts/emr/env.py
 	$(EMR) up -d --wait
 	python3 scripts/emr/bootstrap.py
 
-emr-down: ## Stop OpenMRS and the sync gateway (data kept)
+emr-down: ## Stop the EMRs and the sync gateway (data kept)
 	$(EMR) down -t 20
 
-emr-wipe: ## Remove OpenMRS and the sync gateway with all their data (next emr-up starts from empty)
+emr-wipe: ## Remove the EMRs and the sync gateway with all their data (next emr-up starts from empty)
 	$(EMR) down -v -t 5
 
-emr-reset: ## Put the EMR's demo data back to the seed (seconds; done by make reset too)
+emr-reset: ## Put both EMRs' demo data back to the seed (seconds; done by make reset too)
 	python3 scripts/emr/seed.py --reset
 
 doctor: .env ## Check every health endpoint

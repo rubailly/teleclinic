@@ -1,11 +1,15 @@
-# The sync gateway (design 4.5.2): two OpenFn workflows between TeleClinic and a facility OpenMRS.
+# The sync gateway (design 4.5.2): two OpenFn workflows per EMR, between TeleClinic and
+#   - eBuzima, the central multi-tenant EMR of the health centres (ERPNext with the Healthcare app);
+#   - the OpenMRS of Kibagabaga District Hospital.
 # Deployed by scripts/emr/bootstrap.py through Lightning's provisioning API; ids are derived from these keys, so a
-# redeploy updates in place. One run at a time per workflow.
+# redeploy updates in place. One run at a time per workflow. Each workflow's `system` (the facility registry's
+# emr_system) is given to its steps as the constant SYSTEM, so the TeleClinic-side steps are shared.
 name: teleclinic-sync
-description: TeleClinic and the demo facility's OpenMRS, both ways, without loops
+description: TeleClinic, eBuzima and the district hospital's OpenMRS, both ways, without loops
 workflows:
   outbound:
-    name: TeleClinic to OpenMRS
+    name: TeleClinic to OpenMRS (Kibagabaga DH)
+    system: openmrs-kibagabaga
     triggers:
       kick: {type: webhook}                              # the core calls this when it queues work
       schedule: {type: cron, cron_expression: '* * * * *'}   # safety net, every minute
@@ -19,13 +23,44 @@ workflows:
       - {from_to: due -> write, condition: js_expression, expression: 'state.items && state.items.length > 0', label: work to do}
       - {from_to: write -> report}
   inbound:
-    name: OpenMRS to TeleClinic
+    name: OpenMRS (Kibagabaga DH) to TeleClinic
+    system: openmrs-kibagabaga
     triggers:
       kick: {type: webhook}
       schedule: {type: cron, cron_expression: '* * * * *'}
     jobs:
       since: {name: Where to start, adaptor: '@openfn/language-http@7.3.3', credential: TeleClinic core, body: jobs/inbound-1-since.js}
       fetch: {name: Changed patients in OpenMRS, adaptor: '@openfn/language-http@7.3.3', credential: OpenMRS, body: jobs/inbound-2-fetch.js}
+      deliver: {name: Deliver to TeleClinic, adaptor: '@openfn/language-http@7.3.3', credential: TeleClinic core, body: jobs/inbound-3-deliver.js}
+    edges:
+      - {from_to: kick -> since}
+      - {from_to: schedule -> since}
+      - {from_to: since -> fetch}
+      - {from_to: fetch -> deliver}
+  ebuzima-outbound:
+    name: TeleClinic to eBuzima
+    system: ebuzima
+    triggers:
+      kick: {type: webhook}
+      schedule: {type: cron, cron_expression: '* * * * *'}
+    jobs:
+      due: {name: Take due writes from TeleClinic, adaptor: '@openfn/language-http@7.3.3', credential: TeleClinic core, body: jobs/outbound-1-due.js}
+      write: {name: Write to eBuzima, adaptor: '@openfn/language-http@7.3.3', credential: eBuzima, body: jobs/ebuzima-outbound-2-write.js}
+      report: {name: Report results to TeleClinic, adaptor: '@openfn/language-http@7.3.3', credential: TeleClinic core, body: jobs/outbound-3-report.js}
+    edges:
+      - {from_to: kick -> due}
+      - {from_to: schedule -> due}
+      - {from_to: due -> write, condition: js_expression, expression: 'state.items && state.items.length > 0', label: work to do}
+      - {from_to: write -> report}
+  ebuzima-inbound:
+    name: eBuzima to TeleClinic
+    system: ebuzima
+    triggers:
+      kick: {type: webhook}                              # eBuzima's document webhook on Patient
+      schedule: {type: cron, cron_expression: '* * * * *'}
+    jobs:
+      since: {name: Where to start, adaptor: '@openfn/language-http@7.3.3', credential: TeleClinic core, body: jobs/inbound-1-since.js}
+      fetch: {name: Changed patients in eBuzima, adaptor: '@openfn/language-http@7.3.3', credential: eBuzima, body: jobs/ebuzima-inbound-2-fetch.js}
       deliver: {name: Deliver to TeleClinic, adaptor: '@openfn/language-http@7.3.3', credential: TeleClinic core, body: jobs/inbound-3-deliver.js}
     edges:
       - {from_to: kick -> since}

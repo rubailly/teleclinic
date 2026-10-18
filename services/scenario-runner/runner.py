@@ -49,14 +49,14 @@ SCENARIOS = [
     {"id": "tamper-audit", "scene": "5b", "title": "Tamper with the audit trail",
      "detail": "A break-glass read, then a DBA rewrites that audit row in psql. Pass: the chain check finds the entry, pgAudit names the role. Held 40 s so the alert fires, then restored.",
      "cmd": ["scripts/scenarios/tamper-audit.sh", "40"], "kind": "security"},
-    {"id": "sync-no-loop", "scene": "3b", "title": "Sync without loops (OpenMRS)",
-     "detail": "Keza's encounter is in OpenMRS once; TeleClinic's own write comes back and is dropped as an echo; a phone edited in OpenMRS arrives once and does not bounce.",
+    {"id": "sync-no-loop", "scene": "3b", "title": "Sync without loops (eBuzima)",
+     "detail": "Keza's encounter is in eBuzima once, in Kimironko Health Centre's tenant; TeleClinic's own write comes back and is dropped as an echo; a phone changed by a Kimironko nurse is pushed by eBuzima, arrives once and does not bounce.",
      "cmd": ["scripts/scenarios/sync-no-loop.sh"], "kind": "sync"},
     {"id": "identity-review", "scene": "3c", "title": "Identity, safely",
      "detail": "The worked example goes to a clerk, is linked (national ID offered to OpenMRS) and unlinked (taken back). Different national IDs: never offered. Same UPI: linked automatically.",
      "cmd": ["scripts/scenarios/identity-review.sh"], "kind": "sync"},
-    {"id": "emr-offline", "scene": "4c", "title": "The facility record goes offline",
-     "detail": "OpenMRS is stopped while two consultations are decided; writes wait with backoff; when it is back they drain in order, one encounter each.",
+    {"id": "emr-offline", "scene": "4c", "title": "The hospital record goes offline",
+     "detail": "Kibagabaga District Hospital's OpenMRS is stopped while two consultations are decided; writes wait with backoff; when it is back they drain in order, one encounter each.",
      "cmd": ["scripts/scenarios/emr-offline.sh", "30"], "kind": "failure"},
     {"id": "model-off", "scene": "2", "title": "Kill switch: model off",
      "detail": "An administrator switches the triage model off. New cases are rules-only and the clinician queue shows a banner.",
@@ -268,15 +268,17 @@ select json_build_object(
   'queue', (select coalesce(json_object_agg(status, n), '{}') from (select status, count(*) n from sync.outbound group by 1) q),
   'oldestSeconds', (select coalesce(extract(epoch from now() - min(created_at)), 0) from sync.outbound where status = 'PENDING'),
   'lastError', (select last_error from sync.outbound where status = 'PENDING' and last_error is not null order by created_at limit 1),
-  'events', (select coalesce(json_agg(e order by e.id desc), '[]') from (select id, to_char(at, 'HH24:MI:SS') at, direction, outcome,
-             teleclinic_id, detail from sync.event order by id desc limit 6) e),
+  'pendingBy', (select coalesce(json_object_agg(target, n), '{}') from (select target, count(*) n from sync.outbound
+                where status = 'PENDING' group by 1) t),
+  'events', (select coalesce(json_agg(e order by e.id desc), '[]') from (select id, to_char(at, 'HH24:MI:SS') at, system, direction,
+             outcome, teleclinic_id, detail from sync.event order by id desc limit 6) e),
   'identity', (select coalesce(json_object_agg(status, n), '{}') from (select status, count(*) n from matching.candidate group by 1) m),
   'links', (select count(*) from matching.link where active))
 """
 
 
 def collect_emr():
-    """The facility EMR side: containers of the teleclinic-emr project, the sync queue and recent sync events."""
+    """The EMR side: containers of the teleclinic-emr project (eBuzima, OpenMRS, OpenFn), the sync queue and recent events."""
     out = sh(["docker", "ps", "-a", "--filter", "label=com.docker.compose.project=teleclinic-emr",
               "--format", "{{.Names}}|{{.State}}|{{.Status}}"])
     services = {}
@@ -294,10 +296,11 @@ def collect_emr():
             data = None
     with lock:
         prev = state["emr"]
-        was = (prev or {}).get("services", {}).get("openmrs-backend", {}).get("state")
-        now = services.get("openmrs-backend", {}).get("state")
-        if was and now and was != now:
-            event(f"OpenMRS {'is back' if now == 'running' else 'went offline'}", "ok" if now == "running" else "bad")
+        for svc, label in (("openmrs-backend", "OpenMRS (Kibagabaga DH)"), ("ebuzima-backend", "eBuzima")):
+            was = (prev or {}).get("services", {}).get(svc, {}).get("state")
+            now = services.get(svc, {}).get("state")
+            if was and now and was != now:
+                event(f"{label} {'is back' if now == 'running' else 'went offline'}", "ok" if now == "running" else "bad")
         state["emr"] = {"services": services, "sync": data} if services else None
 
 

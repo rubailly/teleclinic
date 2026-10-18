@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""The demo facility's own patients in OpenMRS (synthetic), for identity matching.
+"""The facilities' own patients (synthetic): the district hospital's in OpenMRS, for identity matching, and the health
+centres' in eBuzima.
 
   seed.py          adds them if missing
-  seed.py --reset  back to the demo's starting point: every patient purged (observations, encounters, then the
-                   patient, so unique identifiers are free again), then the seed added. Seconds, no restart.
+  seed.py --reset  back to the demo's starting point: every patient purged (OpenMRS: observations, encounters, then the
+                   patient, so unique identifiers are free again; eBuzima: encounters cancelled and deleted, the
+                   patient's contact, then the patient), then the seed added. Seconds, no restart.
 """
 import sys
 
-from emr import META, OPENMRS, env, openmrs, request
+from emr import META, OPENMRS, ebuzima_admin, env, openmrs, request
 
 # The TeleClinic side is services/core/src/main/resources/db/demo/V1002__demo_identity.sql
 FACILITY = [
@@ -22,6 +24,11 @@ FACILITY = [
     # Nobody TeleClinic knows
     {"given": "Pacifique", "family": "Nkurunziza", "gender": "M", "birthdate": "1975-11-02",
      "identifiers": {}, "phone": "+250788000310"},
+]
+# Registered at the health centres; nobody TeleClinic knows
+HEALTH_CENTRES = [
+    {"first_name": "Claudine", "last_name": "Mukamana", "sex": "Female", "dob": "1979-02-11", "mobile": "+250788000401"},
+    {"first_name": "Emmanuel", "last_name": "Ndayisaba", "sex": "Male", "dob": "1966-08-30", "mobile": "+250788000402"},
 ]
 FACILITY_ID_TYPE = "8d79403a-c2cc-11de-8d13-0010c6dffd0f"   # the distribution's "Old Identification Number" (no check digit)
 
@@ -56,19 +63,43 @@ def add(p, n):
                                 "identifiers": identifiers})
 
 
+def ebuzima(reset):
+    erp = ebuzima_admin()
+    existing = erp.list("Patient")
+    if reset:
+        for enc in erp.list("Patient Encounter", fields=("name", "docstatus")):
+            if enc["docstatus"] == 1:
+                erp.call("POST", "method/frappe.client.cancel", {"doctype": "Patient Encounter", "name": enc["name"]})
+            erp.delete("Patient Encounter", enc["name"])
+        for c in erp.list("Contact", [["Dynamic Link", "link_doctype", "=", "Patient"]]):
+            erp.delete("Contact", c["name"])
+        for p in existing:
+            erp.delete("Patient", p["name"])
+        existing = []
+    if existing:
+        return f"eBuzima patients: {len(existing)} present, seed left as is"
+    for p in HEALTH_CENTRES:
+        erp.create("Patient", p)
+    return f"eBuzima patients: {'purged and ' if reset else ''}seeded {len(HEALTH_CENTRES)}"
+
+
 def main():
     reset = "--reset" in sys.argv
+    if "--openmrs-only" not in sys.argv:
+        print(ebuzima(reset))
+    if "--ebuzima-only" in sys.argv:
+        return
     existing = patients()
     if reset:
         for u in existing:
             purge(u)
         existing = []
     if existing:
-        print(f"facility patients: {len(existing)} present, seed left as is")
+        print(f"OpenMRS patients: {len(existing)} present, seed left as is")
         return
     for n, p in enumerate(FACILITY):
         add(p, n + 1)
-    print(f"facility patients: {'purged and ' if reset else ''}seeded {len(FACILITY)}")
+    print(f"OpenMRS patients: {'purged and ' if reset else ''}seeded {len(FACILITY)}")
 
 
 if __name__ == "__main__":

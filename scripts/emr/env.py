@@ -25,6 +25,11 @@ GENERATORS = {
     "OPENFN_WORKER_SECRET": lambda: secrets.token_hex(32),
     "OPENFN_WORKER_RUNS_PRIVATE_KEY": rsa_key_b64,
     "OPENFN_ADMIN_PASSWORD": lambda: "Lightning-" + secrets.token_hex(6),
+    "EBUZIMA_DB_ROOT_PASSWORD": lambda: secrets.token_hex(16),
+    "EBUZIMA_ADMIN_PASSWORD": lambda: "Ebuzima-" + secrets.token_hex(6),
+    "EBUZIMA_API_KEY": lambda: secrets.token_hex(8),
+    "EBUZIMA_API_SECRET": lambda: secrets.token_hex(16),
+    "EBUZIMA_NURSE_PASSWORD": lambda: "Nurse-" + secrets.token_hex(6),
     # Shared between the core's internal sync endpoints and the gateway's credential
     "SYNC_KEY": lambda: secrets.token_hex(24),
 }

@@ -1,4 +1,4 @@
-"""Shared helpers for the EMR scripts: .env, HTTP with basic auth, OpenMRS REST, Lightning, deterministic ids."""
+"""Shared helpers for the EMR scripts: .env, HTTP with basic auth, OpenMRS REST, eBuzima (Frappe) REST, Lightning, ids."""
 import base64
 import json
 import os
@@ -12,6 +12,7 @@ import uuid
 ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OPENMRS = "http://localhost:9880/openmrs"
 LIGHTNING = "http://localhost:9480"
+EBUZIMA = "http://localhost:9580"
 # The same namespace as config/openmrs/teleclinic-metadata.json; Lightning ids come from it too
 NAMESPACE = uuid.UUID("6f2b1f4e-3c1d-4b8e-9a52-7e0c4d1a9b30")
 META = json.load(open(os.path.join(ROOT, "config", "openmrs", "teleclinic-metadata.json")))
@@ -76,3 +77,47 @@ def lightning_rpc(code):
     r = subprocess.run(["docker", "exec", "teleclinic-emr-openfn-1", "/app/bin/lightning", "rpc", code],
                        capture_output=True, text=True, timeout=120)
     return r.stdout + r.stderr
+
+
+class Frappe:
+    """eBuzima's REST API (Frappe), signed in with a password (session cookie) or an API key (token)."""
+
+    def __init__(self, user=None, password=None, token=None):
+        self.headers = {"Authorization": f"token {token}"} if token else {}
+        if user:
+            jar = urllib.request.HTTPCookieProcessor()
+            opener = urllib.request.build_opener(jar)
+            req = urllib.request.Request(f"{EBUZIMA}/api/method/login", method="POST",
+                                         data=json.dumps({"usr": user, "pwd": password}).encode(),
+                                         headers={"Content-Type": "application/json", "Accept": "application/json"})
+            opener.open(req, timeout=60).read()
+            self.headers = {"Cookie": "; ".join(f"{c.name}={c.value}" for c in jar.cookiejar)}
+
+    def call(self, method, path, body=None, ok=(200, 201, 202), timeout=120):
+        return request(method, f"{EBUZIMA}/api/{path}", body, headers=self.headers, ok=ok, timeout=timeout)[1]
+
+    @staticmethod
+    def resource(doctype, name=""):
+        return "resource/" + urllib.parse.quote(doctype) + ("/" + urllib.parse.quote(name, safe="") if name else "")
+
+    def find(self, doctype, name):
+        status, data = request("GET", f"{EBUZIMA}/api/{self.resource(doctype, name)}", headers=self.headers, ok=(200, 404))
+        return data["data"] if status == 200 else None
+
+    def list(self, doctype, filters=None, fields=("name",)):
+        q = urllib.parse.urlencode({"filters": json.dumps(filters or []), "fields": json.dumps(list(fields)),
+                                    "limit_page_length": 0})
+        return self.call("GET", f"{self.resource(doctype)}?{q}")["data"]
+
+    def create(self, doctype, body):
+        return self.call("POST", self.resource(doctype), body)["data"]
+
+    def update(self, doctype, name, body):
+        return self.call("PUT", self.resource(doctype, name), body)["data"]
+
+    def delete(self, doctype, name):
+        self.call("DELETE", self.resource(doctype, name))
+
+
+def ebuzima_admin():
+    return Frappe("Administrator", env()["EBUZIMA_ADMIN_PASSWORD"])

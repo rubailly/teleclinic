@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Configures the EMR and the sync gateway (idempotent; safe to run again).
+"""Configures both EMRs and the sync gateway (idempotent; safe to run again).
 
+eBuzima: see ebuzima.py (setup wizard, tenants, custom fields, integration user, nurse, webhook).
 OpenMRS: TeleClinic's metadata is Initializer config (config/openmrs/initializer); this adds the integration user the
-gateway writes as, so OpenMRS's own audit shows the source, and seeds the facility's patients.
+gateway writes as, so OpenMRS's own audit shows the source. Then both EMRs' own patients are seeded.
 Lightning: the admin user and API token, the project, its two credentials and the workflows in sync/project.yaml, through
 the provisioning API with ids derived from names, then one run at a time per workflow. Prints names, never secrets.
 """
@@ -13,12 +14,14 @@ import subprocess
 
 import yaml
 
+import ebuzima
 from emr import LIGHTNING, OPENMRS, ROOT, env, lightning_id, lightning_rpc, openmrs, request, save_env, wait
 
 SYNC_USER = "teleclinic-sync"
-# The core runs behind HAProxy's core pool on the interop network; the gateway reaches OpenMRS on the EMR network
+# The core runs behind HAProxy's core pool on the interop network; the gateway reaches the EMRs on the EMR network
 CORE_URL = "http://haproxy:9100"
 OPENMRS_INTERNAL = "http://openmrs-backend:8080/openmrs"
+EBUZIMA_INTERNAL = "http://ebuzima:8080"
 
 
 def step(name, fn):
@@ -98,6 +101,7 @@ def credentials():
     return {
         "TeleClinic core": {"baseUrl": CORE_URL, "syncKey": e["SYNC_KEY"]},
         "OpenMRS": {"baseUrl": OPENMRS_INTERNAL, "username": SYNC_USER, "password": e["OPENMRS_SYNC_PASSWORD"]},
+        "eBuzima": {"baseUrl": EBUZIMA_INTERNAL, "apiKey": e["EBUZIMA_API_KEY"], "apiSecret": e["EBUZIMA_API_SECRET"]},
     }
 
 
@@ -124,8 +128,10 @@ def deploy_workflows():
     workflows = []
     for key, wf in PROJECT["workflows"].items():
         wid = lambda part, k=key: lightning_id(f"{k}:{part}")
+        # The workflow's EMR, for the steps shared by every EMR's workflows
+        header = f"const SYSTEM = {json.dumps(wf['system'])};   // set by scripts/emr/bootstrap.py from sync/project.yaml\n\n"
         jobs = [{"id": wid(f"job:{jk}"), "name": j["name"], "adaptor": j["adaptor"],
-                 "body": open(os.path.join(ROOT, "sync", j["body"])).read(),
+                 "body": header + open(os.path.join(ROOT, "sync", j["body"])).read(),
                  "project_credential_id": project_credentials[j["credential"]]} for jk, j in wf["jobs"].items()]
         triggers = [{"id": wid(f"trigger:{tk}"), "type": t["type"], "enabled": True,
                      **({"cron_expression": t["cron_expression"]} if t["type"] == "cron" else {})}
@@ -156,21 +162,25 @@ def deploy_workflows():
 
 
 def check_hooks():
-    expected = {"SYNC_OUTBOUND_HOOK": webhook_url("outbound"), "SYNC_INBOUND_HOOK": webhook_url("inbound")}
+    expected = {"OPENMRS_OUTBOUND_HOOK": webhook_url("outbound"), "OPENMRS_INBOUND_HOOK": webhook_url("inbound"),
+                "EBUZIMA_OUTBOUND_HOOK": webhook_url("ebuzima-outbound"), "EBUZIMA_INBOUND_HOOK": webhook_url("ebuzima-inbound")}
     compose = open(os.path.join(ROOT, "compose", "apps.yml")).read()
-    missing = [k for k, v in expected.items() if v not in compose]
+    missing = [k for k, v in expected.items() if f"{k}: {v}" not in compose]
     if missing:
         raise RuntimeError(f"compose/apps.yml does not point at the gateway's webhooks: {expected}")
-    return "core points at both webhook triggers"
+    return "core points at all four webhook triggers"
 
 
 def main():
-    print("EMR and sync gateway")
+    print("EMRs and sync gateway")
+    wait("eBuzima REST API", ebuzima.wait_ready)
     wait("OpenMRS REST API", lambda: openmrs("GET", "session")["authenticated"])
     wait("OpenFn Lightning", lambda: request("GET", f"{LIGHTNING}/health_check")[0] == 200)
+    for name, fn in ebuzima.STEPS:
+        step(name, fn)
     step("OpenMRS integration user", ensure_sync_user)
-    step("Facility patients", lambda: subprocess.run(["python3", os.path.join(ROOT, "scripts/emr/seed.py")],
-                                                      capture_output=True, text=True, check=True).stdout.strip())
+    step("Facility patients (both EMRs)", lambda: subprocess.run(["python3", os.path.join(ROOT, "scripts/emr/seed.py")],
+                                                      capture_output=True, text=True, check=True).stdout.strip().replace("\n", "; "))
     step("Lightning admin and API token", ensure_lightning_user)
     step("Lightning project", ensure_project)
     step("Lightning credentials", ensure_credentials)
@@ -178,6 +188,8 @@ def main():
     step("Core webhooks", check_hooks)
     print(f"  Lightning: {LIGHTNING} (admin@teleclinic.local, password OPENFN_ADMIN_PASSWORD in .env)")
     print(f"  OpenMRS:   http://localhost:9880/openmrs/spa (admin, password OPENMRS_ADMIN_PASSWORD in .env)")
+    print(f"  eBuzima:   http://localhost:9580 (Administrator, password EBUZIMA_ADMIN_PASSWORD in .env; "
+          f"{ebuzima.NURSE[0]}, password EBUZIMA_NURSE_PASSWORD)")
 
 
 if __name__ == "__main__":

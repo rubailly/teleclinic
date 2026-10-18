@@ -39,13 +39,14 @@ check "Prometheus scraping"            scrape
 check "Grafana"                        bash -c "curl -fsS --max-time 3 http://localhost:9700/api/health | grep -o '\"database\": *\"ok\"'"
 emr_check() {  # optional part of the stack: report, never fail, when it is not running at all
   if ! docker ps --format '{{.Names}}' | grep -q '^teleclinic-emr-'; then echo "not running (optional: make emr-up)"; return 0; fi
+  curl -fsS --max-time 5 http://localhost:9580/api/method/ping | grep -q pong || { echo "eBuzima not answering"; return 1; }
   curl -fsS --max-time 5 -u "admin:$OPENMRS_ADMIN_PASSWORD" http://localhost:9880/openmrs/ws/rest/v1/session | grep -q '"authenticated":true' \
     || { echo "OpenMRS REST API not answering"; return 1; }
   curl -fsS --max-time 3 http://localhost:9480/health_check >/dev/null || { echo "Lightning not answering"; return 1; }
   local wf; wf=$(curl -fsS --max-time 5 -H "Authorization: Bearer $OPENFN_API_TOKEN" http://localhost:9480/api/workflows \
     | python3 -c "import json,sys; print(len(json.load(sys.stdin)['workflows']))" 2>/dev/null)
-  [ "${wf:-0}" -ge 2 ] || { echo "sync workflows not deployed (make emr-up)"; return 1; }
-  echo "OpenMRS up, Lightning up, $wf workflows"
+  [ "${wf:-0}" -ge 4 ] || { echo "sync workflows not deployed (make emr-up)"; return 1; }
+  echo "eBuzima up, OpenMRS up, Lightning up, $wf workflows"
 }
 sync_queue() {
   if ! docker ps --format '{{.Names}}' | grep -q '^teleclinic-emr-'; then echo "EMR not running"; return 0; fi
@@ -54,7 +55,7 @@ sync_queue() {
   [ "$dead" = 0 ] || { echo "$dead dead letter(s): see the emr-sync-backlog runbook"; return 1; }
   echo "$pending waiting, no dead letters"
 }
-check "Facility EMR and sync gateway"  emr_check
+check "EMRs and sync gateway"          emr_check
 check "Sync queue"                     sync_queue
 check "USSD gateway"                  curl -fsS --max-time 3 http://localhost:9380/health
 haproxy_pool() { curl -fsS --max-time 3 "http://localhost:9404/stats;csv" | awk -F, '$1=="core" && $2!="BACKEND" {printf "%s=%s(w%s) ", $2, $18, $19}'; }

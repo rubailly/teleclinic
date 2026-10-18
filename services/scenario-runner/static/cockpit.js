@@ -136,14 +136,15 @@ function emr(s) {
   const pending = q.PENDING || 0, dead = q.DEAD || 0;
   const ident = e.sync?.identity || {};
   $("emr").innerHTML = `<div class="recon">
-      ${svc("openmrs-backend", "OpenMRS")}
+      ${svc("ebuzima-backend", "eBuzima")}
+      ${svc("openmrs-backend", "OpenMRS (DH)")}
       ${svc("openfn", "OpenFn Lightning")}
-      <div class="rbox"><h3>Writes to the EMR</h3><div class="big">${pending} <small>waiting</small> · ${dead} <small>dead</small></div>
-        <p>${q.DONE || 0} delivered${pending ? ` · oldest ${Math.round(e.sync.oldestSeconds)} s` : ""}${e.sync?.lastError ? `<br><span class="muted small">${esc(e.sync.lastError.slice(0, 80))}</span>` : ""}</p></div>
+      <div class="rbox"><h3>Writes to the EMRs</h3><div class="big">${pending} <small>waiting</small> · ${dead} <small>dead</small></div>
+        <p>${q.DONE || 0} delivered${pending ? ` · ${Object.entries(e.sync.pendingBy || {}).map(([k, v]) => `${esc(k)} ${v}`).join(", ")}` : ""}${pending ? ` · oldest ${Math.round(e.sync.oldestSeconds)} s` : ""}${e.sync?.lastError ? `<br><span class="muted small">${esc(e.sync.lastError.slice(0, 80))}</span>` : ""}</p></div>
       <div class="rbox"><h3>Identity</h3><div class="big">${ident.PENDING || 0} <small>to review</small></div>
         <p>${e.sync?.links || 0} linked · ${ident.BLOCKED || 0} never offered</p></div>
     </div>
-    <table class="emr-events">${(e.sync?.events || []).map((x) => `<tr><td>${esc(x.at)}</td><td>${esc(x.direction.toLowerCase())}</td>
+    <table class="emr-events">${(e.sync?.events || []).map((x) => `<tr><td>${esc(x.at)}</td><td>${esc(x.system || "")}</td><td>${esc(x.direction.toLowerCase())}</td>
       <td><span class="badge ${x.outcome === "ECHO_DROPPED" ? "b-muted" : x.outcome === "APPLIED" || x.outcome === "CREATED" || x.outcome.includes("LINK") ? "b-ok" : x.outcome === "REVIEW" ? "b-warn" : x.outcome === "BLOCKED" ? "b-bad" : "b-muted"}">${esc(x.outcome.replace("_", " "))}</span></td>
       <td class="muted">${esc(x.detail || "")}</td></tr>`).join("")}</table>`;
 }

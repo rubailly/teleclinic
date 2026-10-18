@@ -1,7 +1,11 @@
-# Facility EMR (OpenMRS O3) and the sync gateway (OpenFn Lightning and its worker).
-# A separate, long-lived Compose project (make emr-up): OpenMRS takes minutes to initialise an empty database, so
-# `make reset` does not restart it; it puts the EMR's demo data back to its seed state through the REST API instead.
-# The core works without it, which is also how it behaves when a facility EMR is offline.
+# Facility EMRs and the sync gateway, as deployed in Rwanda:
+#   - eBuzima (ERPNext with the Frappe Healthcare app): one central, multi-tenant instance for health centres, where
+#     each health centre is a tenant (an ERPNext Company) on the same site;
+#   - OpenMRS O3: one installation per hospital (here, one district hospital);
+#   - OpenFn Lightning and its worker: the sync gateway between the core and both.
+# A separate, long-lived Compose project (make emr-up): both EMRs take minutes to initialise an empty database, so
+# `make reset` does not restart them; it puts their demo data back to the seed state through their APIs instead.
+# The core works without them, which is also how it behaves when an EMR is offline.
 name: teleclinic-emr
 
 x-initializer: &initializer
@@ -12,6 +16,16 @@ x-initializer: &initializer
   - ./config/openmrs/initializer/locations:/openmrs/distribution/openmrs_config/locations/teleclinic:ro
   - ./config/openmrs/initializer/concepts:/openmrs/distribution/openmrs_config/concepts/teleclinic:ro
   - ./config/openmrs/initializer/personattributetypes:/openmrs/distribution/openmrs_config/personattributetypes/teleclinic:ro
+
+x-ebuzima: &ebuzima
+  # services/ebuzima/Dockerfile: frappe/erpnext v15.121.4 with the Healthcare app pinned to a commit
+  image: teleclinic/ebuzima:v15.121.4-healthcare
+  build: ./services/ebuzima
+  restart: unless-stopped
+  volumes:
+    - ebuzima-sites:/home/frappe/frappe-bench/sites
+    - ebuzima-logs:/home/frappe/frappe-bench/logs
+  networks: [emr]
 
 services:
   # Routes /openmrs/spa to the O3 frontend and /openmrs to the backend
@@ -81,6 +95,144 @@ services:
     mem_limit: 512m
     networks: [emr]
 
+  # eBuzima stand-in, modelled on frappe_docker's pwd.yml. One site (ebuzima) serves every health centre.
+  ebuzima:
+    <<: *ebuzima
+    command: ["nginx-entrypoint.sh"]
+    environment:
+      BACKEND: ebuzima-backend:8000
+      SOCKETIO: ebuzima-websocket:9000
+      FRAPPE_SITE_NAME_HEADER: ebuzima
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      UPSTREAM_REAL_IP_RECURSIVE: "off"
+      PROXY_READ_TIMEOUT: 120
+      CLIENT_MAX_BODY_SIZE: 50m
+    ports:
+      - "9580:8080"   # eBuzima: http://localhost:9580 (Desk at /app)
+    depends_on:
+      ebuzima-backend: {condition: service_healthy}
+      ebuzima-websocket: {condition: service_started}
+      ebuzima-create-site: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/api/method/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    mem_limit: 64m
+    # The gateway's worker reaches it as http://ebuzima:8080
+    networks:
+      emr: {aliases: [ebuzima-web]}
+
+  ebuzima-backend:
+    <<: *ebuzima
+    depends_on:
+      ebuzima-configurator: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs -H 'Host: ebuzima' http://localhost:8000/api/method/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 1g
+
+  # Writes common_site_config.json (database and Redis hosts), then exits
+  ebuzima-configurator:
+    <<: *ebuzima
+    restart: "no"
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        ls -1 apps > sites/apps.txt &&
+        bench set-config -g db_host ebuzima-db &&
+        bench set-config -gp db_port 3306 &&
+        bench set-config -g redis_cache redis://ebuzima-redis-cache:6379 &&
+        bench set-config -g redis_queue redis://ebuzima-redis-queue:6379 &&
+        bench set-config -g redis_socketio redis://ebuzima-redis-queue:6379 &&
+        bench set-config -gp socketio_port 9000
+    depends_on:
+      ebuzima-db: {condition: service_healthy}
+
+  # Creates the site with ERPNext and Healthcare on first start (several minutes); a no-op after
+  ebuzima-create-site:
+    <<: *ebuzima
+    restart: "no"
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        if [ -d sites/ebuzima ]; then echo "site ebuzima already exists"; exit 0; fi;
+        bench new-site ebuzima
+        --mariadb-user-host-login-scope='%'
+        --db-root-username root
+        --db-root-password "$$DB_ROOT_PASSWORD"
+        --admin-password "$$ADMIN_PASSWORD"
+        --install-app erpnext
+        --install-app healthcare
+        --set-default
+    environment:
+      DB_ROOT_PASSWORD: ${EBUZIMA_DB_ROOT_PASSWORD}
+      ADMIN_PASSWORD: ${EBUZIMA_ADMIN_PASSWORD}
+    depends_on:
+      ebuzima-configurator: {condition: service_completed_successfully}
+      ebuzima-redis-cache: {condition: service_started}
+      ebuzima-redis-queue: {condition: service_started}
+
+  ebuzima-websocket:
+    <<: *ebuzima
+    command: ["node", "/home/frappe/frappe-bench/apps/frappe/socketio.js"]
+    depends_on:
+      ebuzima-configurator: {condition: service_completed_successfully}
+    mem_limit: 128m
+
+  # Runs document webhooks (the push to the sync gateway) and other background jobs
+  ebuzima-worker:
+    <<: *ebuzima
+    command: ["bench", "worker", "--queue", "long,default,short"]
+    depends_on:
+      ebuzima-create-site: {condition: service_completed_successfully}
+    mem_limit: 512m
+
+  ebuzima-scheduler:
+    <<: *ebuzima
+    command: ["bench", "schedule"]
+    depends_on:
+      ebuzima-create-site: {condition: service_completed_successfully}
+    mem_limit: 256m
+
+  ebuzima-db:
+    image: mariadb:10.6.21
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MARIADB_ROOT_PASSWORD: ${EBUZIMA_DB_ROOT_PASSWORD}
+    volumes:
+      - ebuzima-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    mem_limit: 512m
+    networks: [emr]
+
+  ebuzima-redis-cache:
+    image: redis:7.2.5-alpine
+    restart: unless-stopped
+    mem_limit: 64m
+    networks: [emr]
+
+  ebuzima-redis-queue:
+    image: redis:7.2.5-alpine
+    restart: unless-stopped
+    volumes:
+      - ebuzima-redis-queue-data:/data
+    mem_limit: 64m
+    networks: [emr]
+
   # OpenFn Lightning: the sync gateway's workflows (sync/), run by the worker
   openfn:
     image: openfn/lightning:v2.19.0
@@ -127,7 +279,7 @@ services:
     depends_on:
       openfn: {condition: service_healthy}
     mem_limit: 768m
-    # Reaches OpenMRS on the EMR network and the core (through HAProxy) on the interop network
+    # Reaches both EMRs on the EMR network and the core (through HAProxy) on the interop network
     networks: [emr, interop]
 
   openfn-db:
@@ -158,3 +310,7 @@ volumes:
   openmrs-data:
   openmrs-db-data:
   openfn-db-data:
+  ebuzima-sites:
+  ebuzima-logs:
+  ebuzima-db-data:
+  ebuzima-redis-queue-data:
