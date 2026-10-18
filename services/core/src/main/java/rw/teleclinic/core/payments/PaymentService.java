@@ -1,5 +1,6 @@
 package rw.teleclinic.core.payments;
 
+import io.micrometer.core.instrument.Metrics;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -107,6 +108,7 @@ public class PaymentService {
     public WebhookOutcome handleWebhook(String body, String signatureHeader) {
         if (!signature.isValid(signatureHeader, body, clock.instant())) {
             log.warn("Webhook rejected: invalid or expired signature");
+            webhookOutcome("REJECTED");
             throw new ApiException(HttpStatus.UNAUTHORIZED, "invalid-signature", "Webhook signature is invalid or expired");
         }
         JsonNode event;
@@ -128,6 +130,7 @@ public class PaymentService {
                 .params(eventId, providerPaymentId, type).update();
         if (inserted == 0) {
             log.info("Webhook {} already processed, acknowledged and ignored", eventId);
+            webhookOutcome(WebhookOutcome.DUPLICATE.name());
             return WebhookOutcome.DUPLICATE;
         }
         WebhookOutcome outcome = type.equals("payment.succeeded")
@@ -135,7 +138,12 @@ public class PaymentService {
                 : WebhookOutcome.IGNORED;
         jdbc.sql("UPDATE payments.webhook_event SET outcome = ? WHERE event_id = ?").params(outcome.name(), eventId).update();
         log.info("Webhook {} for {}: {}", eventId, providerPaymentId, outcome);
+        webhookOutcome(outcome.name());
         return outcome;
+    }
+
+    private static void webhookOutcome(String outcome) {
+        Metrics.counter("teleclinic.payment.webhooks", "outcome", outcome).increment();
     }
 
     /**

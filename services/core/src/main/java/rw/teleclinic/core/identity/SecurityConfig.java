@@ -80,6 +80,8 @@ class SecurityConfig {
                 .requestMatchers("/", "/app/**", "/ui/**", "/favicon.ico").permitAll()
                 // Signed callbacks from the AI trust zone; blocked at the public edge
                 .requestMatchers("/internal/**").permitAll()
+                // Counts and timings only, scraped by Prometheus on the internal network; blocked at the public edge
+                .requestMatchers("/actuator/prometheus").permitAll()
                 .requestMatchers("/api/clinician/**", "/triage/v1/cases/*/review").hasRole("clinician")
                 .requestMatchers("/triage/v1/models/kill-switch", "/triage/v1/models/activate").hasRole("admin")
                 .anyRequest().authenticated())

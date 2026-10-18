@@ -1,5 +1,6 @@
 package rw.teleclinic.core.consultation;
 
+import io.micrometer.core.instrument.Metrics;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.constraints.NotEmpty;
@@ -107,6 +108,7 @@ public class ConsultationService {
                         VALUES (?, ?, ?, ?, 'DRAFT', ?::jsonb, ?)""")
                 .params(id, req.patientId(), subject, channel, toJson(intake), idempotencyKey).update();
         record(id, null, ConsultationState.DRAFT, "booked by " + relation.name().toLowerCase() + " on " + channel);
+        Metrics.counter("teleclinic.consultation.booked", "channel", channel).increment();
 
         jdbc.sql("""
                         UPDATE consultation.consultation
@@ -278,6 +280,7 @@ public class ConsultationService {
         jdbc.sql("INSERT INTO consultation.state_transition (consultation_id, from_state, to_state, reason) VALUES (?, ?, ?, ?)")
                 .params(id, from == null ? null : from.name(), to.name(), reason).update();
         log.info("Consultation {} {} -> {}: {}", id, from, to, reason);
+        Metrics.counter("teleclinic.consultation.transitions", "to", to.name()).increment();
     }
 
     private String toJson(Object value) {

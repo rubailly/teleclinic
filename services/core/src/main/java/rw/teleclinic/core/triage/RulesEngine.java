@@ -1,5 +1,7 @@
 package rw.teleclinic.core.triage;
 
+import io.micrometer.core.instrument.Metrics;
+import io.micrometer.core.instrument.Timer;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,6 +41,11 @@ public class RulesEngine {
     record RuleSet(String version, List<String> symptoms, @JsonProperty("default") Fallback fallback, List<Rule> rules) {
     }
 
+    // Target: p95 under 100 ms (decisions.md). Registered globally; Spring Boot adds its Prometheus registry to it.
+    private static final Timer TIMER = Timer.builder("teleclinic.triage.rules")
+            .description("Time to evaluate the triage rules for one intake").publishPercentileHistogram()
+            .register(Metrics.globalRegistry);
+
     private final RuleSet ruleSet;
     private final Set<String> knownSymptoms;
 
@@ -52,6 +59,10 @@ public class RulesEngine {
     }
 
     public RuleResult evaluate(TriageIntake intake) {
+        return TIMER.record(() -> evaluateNow(intake));
+    }
+
+    private RuleResult evaluateNow(TriageIntake intake) {
         for (String symptom : intake.symptoms()) {
             if (!knownSymptoms.contains(symptom)) {
                 throw ApiException.unprocessable("invalid", "Unknown symptom code: " + symptom);

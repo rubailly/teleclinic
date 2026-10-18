@@ -58,11 +58,19 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        # prometheus is scraped on the internal network; the public gateway refuses /actuator/*
+        include: health,info,prometheus
   endpoint:
     health:
       probes:
         enabled: true
+  metrics:
+    tags:
+      color: ${RELEASE_COLOR:local}
+      version: ${RELEASE_VERSION:dev}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 logging:
   pattern:

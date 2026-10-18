@@ -1,5 +1,6 @@
 package rw.teleclinic.core.triage;
 
+import io.micrometer.core.instrument.Metrics;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -276,6 +277,7 @@ public class TriageCases {
         jdbc.sql("INSERT INTO triage.case_transition (consultation_id, from_status, to_status, reason, actor) VALUES (?, ?, ?, ?, ?)")
                 .params(id, from == null ? null : from.name(), to.name(), reason, actor).update();
         log.info("Triage {} {} -> {}: {}", id, from, to, reason);
+        Metrics.counter("teleclinic.triage.transitions", "to", to.name()).increment();
     }
 
     private void provenance(UUID id, String activity, String agentType, String agentId, Map<String, Object> detail) {
