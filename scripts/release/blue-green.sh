@@ -13,7 +13,7 @@ set -a; source .env; set +a
 source scripts/lib/cluster.sh
 export REPO_DIR=${REPO_DIR:-$PWD}
 COMPOSE=(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml
-         -f compose/ai.yml -f compose/apps.yml --profile release)
+         -f compose/ai.yml -f compose/apps.yml -f compose/obs.yml --profile release)
 version=v1.5; fault=0; expect=release; mode=release
 while [ $# -gt 0 ]; do
   case $1 in

@@ -22,6 +22,15 @@ check "edge -> core: release"         curl -fsS --max-time 3 "$PUBLIC_BASE_URL/a
 check "edge: actuator not exposed"    bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 $PUBLIC_BASE_URL/actuator/health)\" = 404 ] && echo 404"
 check "IremboAccount stand-in (OIDC)" bash -c "curl -fsS --max-time 3 $KEYCLOAK_PUBLIC_URL/realms/$OIDC_REALM/.well-known/openid-configuration | grep -o '\"issuer\":\"[^\"]*\"'"
 check "Ops cockpit (scenario runner)"   curl -fsS --max-time 3 http://127.0.0.1:9500/health
+scrape() {  # every Prometheus target up, except core-green when no release is running
+  curl -fsS --max-time 3 http://127.0.0.1:9790/api/v1/targets | python3 -c "
+import json, sys
+ts = [t for t in json.load(sys.stdin)['data']['activeTargets'] if not (t['labels']['instance'] == 'core-green:8080' and t['health'] != 'up')]
+down = [t['labels']['instance'] for t in ts if t['health'] != 'up']
+assert not down, down
+print(len(ts), 'targets up')"; }
+check "Prometheus scraping"            scrape
+check "Grafana"                        bash -c "curl -fsS --max-time 3 http://localhost:9700/api/health | grep -o '\"database\": *\"ok\"'"
 check "USSD gateway"                  curl -fsS --max-time 3 http://localhost:9380/health
 haproxy_pool() { curl -fsS --max-time 3 "http://localhost:9404/stats;csv" | awk -F, '$1=="core" && $2!="BACKEND" {printf "%s=%s(w%s) ", $2, $18, $19}'; }
 check "HAProxy blue/green pool"       haproxy_pool
@@ -49,8 +58,8 @@ no_egress() {  # the anonymizer must not reach the internet; succeeding here is 
 check "AI model"                       model_mode
 check "AI zone isolation"              no_egress
 
-for svc in $(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/ai.yml -f compose/apps.yml ps --services 2>/dev/null); do
-  check "container: $svc" bash -c "docker inspect --format '{{.State.Health.Status}}' \$(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/ai.yml -f compose/apps.yml ps -q $svc) | grep -x healthy"
+for svc in $(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/ai.yml -f compose/apps.yml -f compose/obs.yml ps --services 2>/dev/null); do
+  check "container: $svc" bash -c "docker inspect --format '{{.State.Health.Status}}' \$(docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/ai.yml -f compose/apps.yml -f compose/obs.yml ps -q $svc) | grep -x healthy"
 done
 
 if [ "$fails" -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) failed."; fi

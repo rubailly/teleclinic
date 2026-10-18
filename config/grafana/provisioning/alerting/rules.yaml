@@ -1,0 +1,266 @@
+# Alert rules evaluated by Grafana every 10 s. Each one links to its runbook in docs/runbooks
+# (served by the ops cockpit at http://127.0.0.1:9500/runbooks/).
+apiVersion: 1
+groups:
+- orgId: 1
+  name: teleclinic
+  folder: TeleClinic
+  interval: 10s
+  rules:
+  - uid: database-no-writable-leader
+    title: Database has no writable leader
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prom
+      model:
+        refId: A
+        expr: min_over_time(sum(haproxy_backend_active_servers{job="pgproxy",proxy="primary"})[15s:1s])
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: dropNN
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
+    for: 0s
+    noDataState: Alerting
+    execErrState: Error
+    isPaused: false
+    labels:
+      severity: critical
+      service: teleclinic
+    annotations:
+      summary: 'pgproxy has no primary: the core cannot write (bookings, payments, triage decisions fail).'
+      description: Patroni normally elects a new leader within 30 s. Page if it lasts longer.
+      runbook_url: http://127.0.0.1:9500/runbooks/database-no-writable-leader
+      __dashboardUid__: teleclinic-slo
+      __panelId__: '7'
+  - uid: triage-review-overdue
+    title: Triage cases past their review deadline
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prom
+      model:
+        refId: A
+        expr: max(teleclinic_triage_review_overdue)
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: dropNN
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    for: 30s
+    noDataState: OK
+    execErrState: Error
+    isPaused: false
+    labels:
+      severity: warning
+      service: teleclinic
+    annotations:
+      summary: At least one triage case passed its review deadline without a clinician's decision.
+      description: The rules urgency stays in force, but the case needs a supervisor now.
+      runbook_url: http://127.0.0.1:9500/runbooks/triage-review-overdue
+      __dashboardUid__: teleclinic-slo
+      __panelId__: '16'
+  - uid: edge-error-budget-burn
+    title: Edge error budget burning fast
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prom
+      model:
+        refId: A
+        expr: sum(rate(haproxy_frontend_http_responses_total{job="edge",proxy="public",code="5xx"}[5m])) / clamp_min(sum(rate(haproxy_frontend_http_responses_total{job="edge",proxy="public"}[5m])),
+          0.001)
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: B
+      relativeTimeRange:
+        from: 3600
+        to: 0
+      datasourceUid: prom
+      model:
+        refId: B
+        expr: sum(rate(haproxy_frontend_http_responses_total{job="edge",proxy="public",code="5xx"}[1h])) / clamp_min(sum(rate(haproxy_frontend_http_responses_total{job="edge",proxy="public"}[1h])),
+          0.001)
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: RA
+      datasourceUid: __expr__
+      model:
+        refId: RA
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: dropNN
+    - refId: RB
+      datasourceUid: __expr__
+      model:
+        refId: RB
+        type: reduce
+        expression: B
+        reducer: last
+        settings:
+          mode: dropNN
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: math
+        expression: $RA > 0.0072 && $RB > 0.0072
+    for: 1m
+    noDataState: OK
+    execErrState: Error
+    isPaused: false
+    labels:
+      severity: critical
+      service: teleclinic
+    annotations:
+      summary: 5xx at the edge is above 14.4 times the 99.95% budget over both 5 minutes and 1 hour.
+      description: At this rate the monthly error budget is gone in about two days.
+      runbook_url: http://127.0.0.1:9500/runbooks/edge-error-budget-burn
+      __dashboardUid__: teleclinic-slo
+      __panelId__: '3'
+  - uid: ussd-step-latency
+    title: USSD steps slower than the budget
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prom
+      model:
+        refId: A
+        expr: histogram_quantile(0.95, sum by (le) (rate(ussd_step_seconds_bucket[5m])))
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: dropNN
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 1.5
+    for: 2m
+    noDataState: OK
+    execErrState: Error
+    isPaused: false
+    labels:
+      severity: warning
+      service: teleclinic
+    annotations:
+      summary: p95 of a USSD step is above 1.5 s; networks drop sessions that answer late.
+      description: Check the core and the database first; the gateway itself is stateless.
+      runbook_url: http://127.0.0.1:9500/runbooks/ussd-step-latency
+      __dashboardUid__: teleclinic-slo
+      __panelId__: '5'
+  - uid: outbox-backlog
+    title: Events not reaching Kafka
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prom
+      model:
+        refId: A
+        expr: max(teleclinic_outbox_oldest_pending_seconds)
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: dropNN
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 60
+    for: 30s
+    noDataState: OK
+    execErrState: Error
+    isPaused: false
+    labels:
+      severity: warning
+      service: teleclinic
+    annotations:
+      summary: The oldest outbox event has waited more than 60 s for Kafka.
+      description: State changes are safe in PostgreSQL; consumers (sync, notifications, AI) are behind until Kafka is back.
+      runbook_url: http://127.0.0.1:9500/runbooks/outbox-backlog
+      __dashboardUid__: teleclinic-slo
+      __panelId__: '23'

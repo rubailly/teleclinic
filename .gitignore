@@ -1,3 +1,4 @@
 .env
 services/*/target/
 *.log
+__pycache__/

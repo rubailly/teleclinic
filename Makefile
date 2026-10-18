@@ -1,6 +1,6 @@
 # TeleClinic reference platform. Run `make help` for the targets.
 SHELL := /bin/bash
-COMPOSE := REPO_DIR=$(CURDIR) docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/ai.yml -f compose/apps.yml
+COMPOSE := REPO_DIR=$(CURDIR) docker compose --project-directory . --env-file .env -f compose/edge.yml -f compose/data.yml -f compose/ai.yml -f compose/apps.yml -f compose/obs.yml
 # Fail and retry a stalled download instead of hanging
 MVN_NET := -Daether.connector.connectTimeout=20000 -Daether.connector.requestTimeout=60000
 # Integration tests start a throwaway Postgres through the host Docker daemon (Testcontainers)

@@ -1,0 +1,26 @@
+# Scrapes every service of the lite profile on the internal network. 5 s so the demo reacts quickly;
+# production would use 15 to 30 s.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: core
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [core-blue:8080, core-green:8080]
+  - job_name: ussd-gateway
+    static_configs:
+      - targets: [ussd-gateway:8300]
+  - job_name: edge
+    static_configs:
+      - targets: [haproxy:9404]
+  - job_name: pgproxy
+    static_configs:
+      - targets: [pgproxy:7000]
+  - job_name: patroni
+    static_configs:
+      - targets: [pg-1:8008, pg-2:8008, pg-3:8008]
+  - job_name: etcd
+    static_configs:
+      - targets: [etcd-1:2379, etcd-2:2379, etcd-3:2379]
