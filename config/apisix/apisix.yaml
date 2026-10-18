@@ -52,8 +52,9 @@ routes:
       limit-count:
         count: 1200
         time_window: 60
+        # Per client: APISIX itself only sees HAProxy's address, so use the one HAProxy recorded
         key_type: var
-        key: remote_addr
+        key: http_x_real_ip
         rejected_code: 429
         policy: local
 #END
