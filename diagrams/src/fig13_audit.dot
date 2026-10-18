@@ -1,0 +1,25 @@
+digraph G {
+  graph [fontname="DejaVu Sans", fontsize=13, bgcolor="white", pad=0.3, nodesep=0.35, ranksep=0.75];
+  node  [fontname="DejaVu Sans", fontsize=13, shape=box, style="rounded,filled", penwidth=2, margin="0.2,0.1"];
+  edge  [fontname="DejaVu Sans", fontsize=11, color="#4A5568", arrowsize=0.8, penwidth=1.3];
+  subgraph cluster_src { label="Where reads and writes happen"; labeljust=l; fontcolor="#2D3748"; style="rounded,dashed,filled"; color="#C0392B"; fillcolor="#FAFBFC";
+    gw [label="API Gateway\naccess log", color="#C0392B", fillcolor="#FDEDEC"];
+    ic [label="Core audit interceptor\nwho, what, which patient,\npurpose-of-use, consent basis", color="#C0392B", fillcolor="#FDEDEC"];
+    pga [label="PostgreSQL pgAudit\nSELECT, INSERT, UPDATE, DELETE\n(catches DBA / direct access)", color="#C0392B", fillcolor="#FDEDEC"];
+    emr [label="EMR audit: eBuzima document\nversions, OpenMRS audit;\nFHIR AuditEvent from sync", color="#C0392B", fillcolor="#FDEDEC"];
+    bg [label="Break-glass access\n(reason required)", color="#C0392B", fillcolor="#FDEDEC"];
+  }
+  k [label="Kafka  audit.events  (replicated, ordered)", shape=cylinder, style=filled, color="#1E8449", fillcolor="#E9F7EF"];
+  w [label="Audit writer: sequence number + SHA-256 hash chain", color="#0B5CC0", fillcolor="#E8F1FB"];
+  am [label="Alertmanager: break-glass, bulk export,\nafter-hours access, failed chain check", color="#C0392B", fillcolor="#FDEDEC"];
+  subgraph cluster_st { label="Tamper-evident storage"; labeljust=l; fontcolor="#2D3748"; style="rounded,dashed,filled"; color="#1E8449"; fillcolor="#FAFBFC";
+    db [label="Append-only audit DB\n(no UPDATE / DELETE rights)", shape=cylinder, style=filled, color="#1E8449", fillcolor="#E9F7EF"];
+    worm [label="MinIO WORM archive\ndaily signed checkpoint", shape=cylinder, style=filled, color="#1E8449", fillcolor="#E9F7EF"];
+    os [label="OpenSearch\nsearch by patient, user, time", shape=cylinder, style=filled, color="#1E8449", fillcolor="#E9F7EF"];
+  }
+  rep [label="Reports: regulator access reports;\npatient 'who accessed my record';\nmonthly chain verification", color="#1E8449", fillcolor="#E9F7EF"];
+  gw -> k; ic -> k; pga -> k [label="shipper"]; emr -> k; bg -> k;
+  k -> w; k -> am [style=dashed]; bg -> am [style=dashed];
+  w -> db; w -> worm; w -> os;
+  db -> rep [label="verify"]; os -> rep;
+}

@@ -1,0 +1,23 @@
+digraph G {
+  graph [fontname="DejaVu Sans", fontsize=13, bgcolor="white", pad=0.3, nodesep=0.5, ranksep=0.6];
+  node  [fontname="DejaVu Sans", fontsize=13, shape=box, style="rounded,filled", penwidth=2, margin="0.22,0.1"];
+  edge  [fontname="DejaVu Sans", fontsize=11, color="#4A5568", arrowsize=0.8, penwidth=1.3];
+  {rank=same; ia [label="IremboAccount identity\nsubject, national ID, name, DOB, phone", color="#C77700", fillcolor="#FFF4E0"];
+              emr [label="EMR candidate records\neBuzima and hospital OpenMRS,\nmatched per EMR", color="#666666", fillcolor="#F1F1F1"]}
+  b [label="1. Blocking\nnational ID exact; phone;\nDOB + phonetic name", color="#0B5CC0", fillcolor="#E8F1FB"];
+  s [label="2. Scoring (Fellegi-Sunter weights)\nKinyarwanda name variants,\ntransposed dates, phone changes", color="#0B5CC0", fillcolor="#E8F1FB"];
+  d [label="Score band?", shape=diamond, style=filled, color="#B7950B", fillcolor="#FEF9E7", margin="0.1,0.05"];
+  auto [label="AUTO-LINK\nhigh score AND 2 strong identifiers\nPatient.link (reversible)", color="#1E8449", fillcolor="#E9F7EF"];
+  rev [label="REVIEW QUEUE\nside-by-side evidence;\nclerk links, rejects, asks for data", color="#B7950B", fillcolor="#FEF9E7"];
+  new [label="NEW PATIENT\nno link created", color="#0B5CC0", fillcolor="#E8F1FB"];
+  blk [label="BLOCKED\ndifferent national IDs:\nnever offered", color="#C0392B", fillcolor="#FDEDEC"];
+  surv [label="3. Survivorship per field\nlegal identity: IremboAccount / national ID\nclinical history stays in source EMR", color="#0B5CC0", fillcolor="#E8F1FB"];
+  wb [label="Write-back to that EMR\nTeleClinic ID and missing\nnational IDs, through the sync gateway", color="#0B5CC0", fillcolor="#E8F1FB"];
+  log [label="Decision log\nwho, why, evidence; AuditEvent;\nsync ledger update", color="#C0392B", fillcolor="#FDEDEC"];
+  un [label="Unlink / correct\nlinks are never destructive;\nwrite-back taken back", color="#C0392B", fillcolor="#FDEDEC"];
+  ia -> b; emr -> b; b -> s -> d;
+  d -> auto [label="high"]; d -> rev [label="medium"]; d -> new [label="low"]; d -> blk [label="conflict"];
+  auto -> surv; rev -> surv [label="approved"];
+  surv -> wb; surv -> log; new -> log; blk -> log;
+  log -> un [dir=both, style=dashed];
+}
