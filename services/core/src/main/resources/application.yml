@@ -72,6 +72,8 @@ teleclinic:
   release:
     color: ${RELEASE_COLOR:local}
     version: ${RELEASE_VERSION:dev}
+    # Rollback drill only (scripts/release/blue-green.sh --fault-rate): share of API calls that fail on purpose
+    fault-rate: ${RELEASE_FAULT_RATE:0}
   identity:
     # Public issuer: the URL the browser sees, and the value required in the id token "iss" claim
     issuer: ${OIDC_ISSUER:http://localhost:9180/realms/irembo-mock}
