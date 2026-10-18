@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TeleClinic Ops cockpit</title>
+  <link rel="stylesheet" href="/static/cockpit.css">
+</head>
+<body>
+<div class="notice"><b>Demo operations console.</b> The buttons run real failure scenarios against this local stack; nothing here is simulated.</div>
+<header class="top">
+  <div class="bar">
+    <div class="mark"><b>Tele</b>Clinic <span class="pill">OPS</span></div>
+    <div class="top-right"><span id="release" class="release">release …</span><span id="clock" class="clock"></span></div>
+  </div>
+  <div class="hero">
+    <div>
+      <h1>Ops cockpit</h1>
+      <p>Live state of the data tier, the edge and the AI service, with the failure scenarios from the design document.</p>
+    </div>
+    <div class="tiles" id="tiles"></div>
+  </div>
+</header>
+
+<main class="layout">
+  <div class="col">
+    <section class="card">
+      <div class="card-head"><h2>Live probes</h2><span class="muted small">last 90 s · one sample every 250 ms · bar height is latency</span></div>
+      <div class="probe">
+        <div class="probe-head"><b>Writes through pgproxy</b><span id="db-note" class="probe-note"></span></div>
+        <svg id="db-chart" class="chart" viewBox="0 0 720 96" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="probe">
+        <div class="probe-head"><b>Requests through the edge</b><span id="edge-note" class="probe-note"></span></div>
+        <svg id="edge-chart" class="chart" viewBox="0 0 720 96" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="axis"><span>−90 s</span><span>−60 s</span><span>−30 s</span><span>now</span></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Nodes</h2><span class="muted small">each node runs one etcd member, one PostgreSQL with Patroni, one Kafka broker</span></div>
+      <div class="nodes" id="nodes"></div>
+      <div class="pools" id="pools"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Reconciliation</h2><span id="recon-badge"></span></div>
+      <div class="recon" id="recon"></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="card">
+      <div class="card-head"><h2>Scenarios</h2><span class="muted small">one at a time</span></div>
+      <div class="scenarios" id="scenarios"></div>
+    </section>
+    <section class="card console-card">
+      <div class="card-head"><h2 id="run-title">Run output</h2><span id="run-status"></span></div>
+      <div class="console" id="console"><span class="dim">Choose a scenario. Its script output appears here, step by step.</span></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Events</h2><span class="muted small">changes the cockpit noticed</span></div>
+      <ol class="events" id="events"></ol>
+    </section>
+  </div>
+</main>
+<script src="/static/cockpit.js"></script>
+</body>
+</html>

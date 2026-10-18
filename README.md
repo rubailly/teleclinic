@@ -13,6 +13,7 @@ make journey     # web journey: consent, triage, co-payment, webhook, queue, Kaf
 make scenario-kill-db-leader      # kill the Postgres leader under writes
 make scenario-kill-kafka-broker   # stop one Kafka broker
 make scenario-partition           # cut the leader's node off the network, then heal
+make scenario-webhooks            # replay the last payment webhook twice and forge one
 make ussd        # book for a child from a basic phone, pay by mobile money, get an SMS
 make clinician   # AI-proposed case, orders gated, clinician override, kill switch, no identifiers in AI logs
 make reset       # back to a known state (about 30 s)
@@ -36,6 +37,7 @@ Requirements: Docker with Compose v2, `make`, `curl`. Nothing else needs to be i
 | **Keycloak** | **Labelled stand-in for IremboAccount** |
 | **irembopay-mock** | **Labelled stand-in for IremboPay and for the national insurance coverage check** |
 | USSD gateway (menus, sessions in Valkey, one page per step) | Real |
+| Ops cockpit and scenario runner (runs the scenario scripts, live probes, reconciliation) | Real; a local demo tool on 127.0.0.1 |
 | **Phone simulator** | **Labelled stand-in for the telecom aggregator, a basic phone, its mobile-money prompt and SMS** |
 
 Later build steps add the remaining components; see `docs/build-plan.md` for the order and `docs/DEMO_STORY.md` for what each one must show.
@@ -101,6 +103,16 @@ Measured (synthetic data; numbers describe the demo model, not clinical performa
 - **One page per step.** Every screen fits 182 characters; the smoke test fails if one does not.
 
 Measured on the demo machine (`make ussd`): the slowest gateway step, booking with the rules triage, took 176 ms; unlocking with the PIN 96 to 158 ms; menu steps under 5 ms. The budget per step is 1,500 ms. The longest page is 130 characters.
+
+## Built so far: the ops cockpit
+
+- **Ops cockpit** at http://127.0.0.1:9500. One button per failure scenario; each runs the same script as `make scenario-*` and streams its output step by step. One scenario at a time.
+- **Live probes.** A row is written through pgproxy (the core's path) and the edge is called every 250 ms; the charts show each sample, and a failed write is red. During a leader kill the gap is visible and timed.
+- **Nodes.** Each of the three nodes shows its PostgreSQL role, state, lag and timeline, its etcd member and its Kafka broker. A node cut off by `docker network disconnect` is marked; so is a leader key still held by a node that is down.
+- **Reconciliation.** Payments in the core against IremboPay's settlement report (count and amount), webhooks processed once with duplicates ignored and forged ones rejected, and outbox events still waiting for Kafka.
+- The runner holds the Docker socket, so it uses the host network and listens on 127.0.0.1 only. It is a demo tool and not part of the production design; production runs these drills from a runbook with the same scripts.
+
+Measured from the cockpit, with the probes writing during each run: database leader killed, writes resumed after 16.8 s, 0 of 18 acknowledged writes lost; node partition, the old leader stopped accepting writes after 4.2 s and the majority elected a new leader after 23.0 s, identical rows (count and checksum) on all nodes after healing; one Kafka broker stopped, 50 of 50 messages written with `acks=all`.
 
 ## Demo users (synthetic)
 

@@ -145,6 +145,7 @@ services:
       - ./config/pgproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
       - "9405:7000"
+      - "127.0.0.1:9432:5000"   # the cockpit's write probe takes the same path as the core
     healthcheck:
       # Healthy only when the cluster has a leader the core can write to
       test: ["CMD-SHELL", "wget -qO- 'http://127.0.0.1:7000/stats;csv' | grep -q '^primary,pg-[0-9],.*,UP,'"]

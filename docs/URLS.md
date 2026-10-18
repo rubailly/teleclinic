@@ -5,6 +5,7 @@
 | Public edge (HAProxy → APISIX → core) | http://localhost:9080 | Sign in at `/login`; `/api/me` shows the session identity |
 | Patient web app | http://localhost:9080/app/ | `/` redirects here; sign in as `patient1` or `patient2` |
 | Clinician queue | http://localhost:9080/clinician/ | Sign in as `clinician1` |
+| Ops cockpit | http://127.0.0.1:9500 | Runs the failure scenarios; live probes, nodes, reconciliation. Local only |
 | USSD phone simulator | http://localhost:9380 | Labelled simulator; demo numbers +250788000001 (Uwase) and +250788000002 (Eric), PIN `1234` |
 | USSD aggregator callback | http://localhost:9380/ussd/callback | Form post: `sessionId`, `phoneNumber`, `serviceCode`, `text` |
 | Release running behind the edge | http://localhost:9080/api/public/version | `{"version":"v1.4","color":"blue"}` |
