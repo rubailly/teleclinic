@@ -19,6 +19,7 @@ import redis
 from fastapi import FastAPI, Form, Header, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from prometheus_client import Counter, Histogram, make_asgi_app
 
 from menus import DANGER_CODES, DAYS, SYMPTOM_CODES, URGENCY, fit, t
 
@@ -33,6 +34,10 @@ store = redis.Redis(host=os.environ.get("VALKEY_HOST", "valkey"), port=6379, dec
 core = httpx.Client(base_url=CORE, timeout=5, headers={"X-Gateway-Key": KEY})
 pay = httpx.Client(base_url=PAY, timeout=5)
 app = FastAPI(title="TeleClinic USSD gateway")
+# Target: every step under 1.5 s at p95 (decisions.md); buckets are dense around it
+STEP_SECONDS = Histogram("ussd_step_seconds", "Time to answer one USSD step", ["step"],
+                         buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 5.0))
+SESSIONS_ENDED = Counter("ussd_sessions_ended_total", "USSD sessions that ended, by the step they ended on", ["step"])
 
 
 class CoreError(Exception):
@@ -185,7 +190,11 @@ def callback(sessionId: str = Form(...), phoneNumber: str = Form(...), text: str
         store.set(key, json.dumps(s), ex=SESSION_TTL)
     else:
         store.delete(key)
-    ms = round((time.perf_counter() - started) * 1000)
+    elapsed = time.perf_counter() - started
+    ms = round(elapsed * 1000)
+    STEP_SECONDS.labels(at_before).observe(elapsed)
+    if reply.startswith("END"):
+        SESSIONS_ENDED.labels(at_before).inc()
     record = {"at": now_iso(), "step": at_before, "input": "****" if at_before == "pin" and entry else entry,
               "ms": ms, "chars": len(reply) - 4, "end": reply.startswith("END"), "reply": reply[4:64]}
     store.lpush(f"ussd:log:{phoneNumber}", json.dumps(record))
@@ -228,6 +237,7 @@ def health():
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/metrics", make_asgi_app())
 
 
 @app.get("/")
