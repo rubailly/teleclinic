@@ -26,3 +26,7 @@ RUN set -e; \
     # the asset build finds apps through sites/apps.txt
     ls -1 apps > sites/apps.txt; \
     bench build --app healthcare
+
+# Serve Healthcare's bundle from the runtime assets folder too (see link-assets.py)
+COPY --chown=frappe:frappe link-assets.py /tmp/link-assets.py
+RUN python3 /tmp/link-assets.py && rm /tmp/link-assets.py
