@@ -8,7 +8,7 @@ MAVEN := docker run --rm -v "$(CURDIR)/services/core":/w -v teleclinic-m2:/root/
 	-v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
 	--add-host=host.docker.internal:host-gateway maven:3.9.9-eclipse-temurin-21 mvn -B -q $(MVN_NET)
 
-.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition ussd scenario-webhooks audit scenario-tamper scenario-sync scenario-identity scenario-emr-offline clinician logs ps release release-bad switch-back interop-network emr-up emr-down emr-wipe emr-reset
+.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition ussd scenario-webhooks audit scenario-tamper scenario-sync scenario-identity scenario-emr-offline clinician logs ps release release-bad switch-back capacity interop-network emr-up emr-down emr-wipe emr-reset
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -113,3 +113,6 @@ release-bad: .env ## Scene 4d: rollback drill; v1.6 fails 30% of API calls and m
 
 switch-back: .env ## Put traffic back on the previous colour (kept running at weight 0)
 	./scripts/release/blue-green.sh --switch-back
+
+capacity: .env ## Capacity test: web intake at 25 to 200/s with 1 to 8 USSD sessions/s, then the per-client quota (about 6 min; make reset after)
+	GEN=16 ./scripts/load/capacity.sh 25:1 50:2 100:4 200:8

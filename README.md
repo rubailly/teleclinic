@@ -22,6 +22,7 @@ make audit       # purpose of use and consent enforced, who accessed my record, 
 make scenario-tamper              # a DBA edits an audit row; the hash chain finds it, pgAudit names the role
 make release     # release v1.5 to the idle colour: 1, 10, 50, 100% under load, gated
 make release-bad # rollback drill: a build that fails 30% of API calls is caught and rolled back
+make capacity    # load test: web intake 25 to 200/s with USSD sessions, then a noisy client (about 6 min; make reset after)
 make switch-back # put traffic back on the previous colour
 make ussd        # book for a child from a basic phone, pay by mobile money, get an SMS
 make clinician   # AI-proposed case, orders gated, clinician override, kill switch, no identifiers in AI logs
@@ -147,6 +148,29 @@ Measured (k6 at 12 requests per second through the edge, plus the cockpit probe)
 | Edge probe during release, switch-back and drill | 285 of 285 requests answered 200 |
 
 The edge rate limit (1,200 requests per minute) is per client: HAProxy records the client address in `X-Real-IP`, overwriting any value sent by the client, and APISIX keys on it. Before this change APISIX only saw HAProxy's address, so all clients shared one limit.
+
+## Built so far: capacity under load
+
+`make capacity` (`scripts/load/capacity.sh`) drives the real paths with k6 at fixed arrival rates, for 60 s per level: web
+intake by a signed-in patient (rules triage in the request, consultation stored, model suggestion queued) and whole USSD
+sessions from the aggregator's callbacks up to the booking. Sixteen generators run inside the Docker network, each with
+its own address, so the edge's per-client quota does not cap the total. Measured on one core instance beside the whole
+stack on the 16 GB laptop (percentiles are the worst generator's):
+
+| Web intakes/s + USSD sessions/s | Failed | Web p95 | USSD step p95 | Async backlog |
+| --- | --- | --- | --- | --- |
+| 25 + 1 | 0 | 196 ms | 171 ms | none |
+| 50 + 2 | 0 | 77 ms | 145 ms | none |
+| 100 + 4 (about 140 requests/s) | 0 | 166 ms | 264 ms | none |
+| 200 + 8 (saturated, about two CPUs) | 0 | 2.4 s | 2.6 s | drained about a minute later |
+
+A noisy client at 80 requests/s got 1,200 a minute and 1,201 refusals (429) while a client at 5/s was fully served.
+
+The test found two faults, both fixed: an overloaded core's health checks timed out behind its own request queue, so
+HAProxy took the only live colour out and every request failed (now at most 80 requests in flight per core, the rest
+queue in HAProxy for up to 5 s); and with the heap at 75% of a 512 MB container the kernel killed the JVM (now 60% of
+640 MB). Model suggestions stay asynchronous under overload: each case is queued at once on the rules result and the
+suggestion follows; one anonymizer instance cleared about 35 a second, so production runs several.
 
 ## Built so far: service levels, alerts and runbooks
 
