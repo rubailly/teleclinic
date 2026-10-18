@@ -15,6 +15,8 @@ class StaticPages implements WebMvcConfigurer {
         registry.addViewController("/clinician/").setViewName("forward:/clinician/index.html");
         registry.addViewController("/audit/").setViewName("forward:/audit/index.html");
         registry.addRedirectViewController("/audit", "/audit/");
+        registry.addViewController("/clerk/").setViewName("forward:/clerk/index.html");
+        registry.addRedirectViewController("/clerk", "/clerk/");
         // Browsers ask for /favicon.ico on their own; the apps' icon is an SVG
         registry.addRedirectViewController("/favicon.ico", "/ui/favicon.svg");
     }

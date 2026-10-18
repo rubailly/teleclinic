@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0063cf">
+  <title>TeleClinic identity review</title>
+  <link rel="icon" href="/ui/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/ui/tc.css">
+  <link rel="stylesheet" href="/clinician/clinician.css">
+  <link rel="stylesheet" href="clerk.css">
+</head>
+<body>
+<div class="notice"><b>Prototype.</b> Identity review with synthetic records. Records are linked, never merged; every decision is audited and reversible.</div>
+<header class="topbar">
+  <div class="wrap wide">
+    <nav class="nav">
+      <a class="wordmark" href="/clerk/"><b>Tele</b><span>Clinic</span><small>Identity</small></a>
+      <div class="nav-links">
+        <span class="who" id="who">…</span>
+        <form id="logout" method="post" action="/logout"><input type="hidden" name="_csrf" id="csrf">
+          <button><span id="logout-icon"></span><span class="label">Sign out</span></button></form>
+      </div>
+    </nav>
+    <div class="hero compact head">
+      <div><h1>Identity review</h1><p>Facility records that may be the same person as a TeleClinic patient. A wrong link puts one person's history in another's chart: link only when sure.</p></div>
+      <div class="stats" id="stats"></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap wide clerk-work">
+  <section>
+    <h2 class="sec">Waiting for a decision</h2>
+    <div id="queue"><p class="muted">Loading…</p></div>
+  </section>
+  <aside>
+    <section class="card raised side-card">
+      <h3>Linked</h3>
+      <div id="links"></div>
+    </section>
+    <section class="card raised side-card">
+      <h3>Never offered</h3>
+      <p class="muted small">Both records carry a national ID and they differ: never the same person, whatever the rest says.</p>
+      <div id="blocked"></div>
+    </section>
+  </aside>
+</main>
+<script src="/ui/icons.js"></script>
+<script src="clerk.js"></script>
+</body>
+</html>
