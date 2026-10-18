@@ -67,13 +67,16 @@ fi
 step "1. $live ($(version_of $live)) is live; releasing $version to $idle"
 [ "$fault" != 0 ] && note "rollback drill: $version fails $(awk -v f="$fault" 'BEGIN{print f*100}')% of API calls on purpose (health checks stay green)"
 IDLE=$(tr a-z A-Z <<<"$idle")
-if ! docker image inspect "teleclinic/core:$version" >/dev/null 2>&1; then
-  note "building teleclinic/core:$version"
+# Always from the current source, so a tag left over from an older build can never be released by mistake
+# (a quick cached build when nothing changed). REUSE_IMAGE=1 releases the existing image as it is.
+if [ "${REUSE_IMAGE:-0}" != 1 ] || ! docker image inspect "teleclinic/core:$version" >/dev/null 2>&1; then
+  note "building teleclinic/core:$version from the current source"
   env "${IDLE}_VERSION=$version" "${COMPOSE[@]}" build -q "core-$idle" || fail "build failed"
 fi
 t_start=$(now_ms)
 env "${IDLE}_VERSION=$version" "${IDLE}_FAULT_RATE=$fault" "${COMPOSE[@]}" up -d --no-deps --wait "core-$idle" >/dev/null 2>&1 \
-  || fail "core-$idle did not become healthy"
+  || { hap "set server core/core-$idle state maint" >/dev/null; "${COMPOSE[@]}" stop -t 5 "core-$idle" >/dev/null 2>&1
+         fail "core-$idle ($version) did not become healthy; it took no traffic and is stopped. Logs: docker logs $(c core-$idle)"; }
 hap "set server core/core-$idle state ready" >/dev/null
 for i in $(seq 1 30); do read -r _ _ st < <(server "$idle"); [ "$st" = UP ] && break; sleep 1; done
 [ "$st" = UP ] || fail "HAProxy does not see core-$idle as up ($st)"

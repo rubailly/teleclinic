@@ -124,7 +124,7 @@ Measured from the cockpit, with the probes writing during each run: database lea
 
 ## Built so far: blue/green release with HAProxy
 
-- `scripts/release/blue-green.sh` finds the live colour, starts the new version on the idle one at weight 0, and moves traffic 1, 10, 50 and 100 percent through HAProxy's runtime API while k6 sends steady load through the public edge.
+- `scripts/release/blue-green.sh` finds the live colour, starts the new version on the idle one at weight 0, and moves traffic 1, 10, 50 and 100 percent through HAProxy's runtime API while k6 sends steady load through the public edge. The version is built from the current source first (a cached build when nothing changed), so an older image with the same tag is never released by mistake; `REUSE_IMAGE=1` releases an existing image as it is. A new colour that fails to start takes no traffic, is put in maintenance and stopped.
 - **Gate at every step:** the new colour's own error counters in HAProxy (5xx, response and connection errors) must stay under 1 percent, and HAProxy must keep it up. A breach puts all traffic back on the live colour in milliseconds, puts the new colour into maintenance and stops it.
 - The previous colour stays running at weight 0. `make switch-back` returns traffic to it, but only if Docker and HAProxy both report it healthy.
 - **Rollback drill:** `make release-bad` deploys v1.6 with a fault switched on by configuration (30 percent of API calls fail). It is the same code as v1.5, standing in for a bad build. Like a real bad build it passes its health checks, so only the traffic gate can catch it.
