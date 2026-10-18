@@ -35,7 +35,9 @@ x-core: &core
     EBUZIMA_INBOUND_HOOK: http://openfn:4000/i/ca422855-5b33-55a4-b2fc-7a9cc019b566
     SMS_URL: http://ussd-gateway:8300
     TRIAGE_SLA_SCALE: ${TRIAGE_SLA_SCALE}
-    JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+    # Heap at most 60% of the container: the rest is threads, class metadata, Kafka and network buffers. At 75% of
+    # 512m the kernel killed the JVM under the capacity test (scripts/load/capacity.sh, 200 intakes/s)
+    JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60 -XX:+ExitOnOutOfMemoryError
   depends_on:
     keycloak:
       condition: service_healthy
@@ -51,7 +53,7 @@ x-core: &core
     timeout: 3s
     retries: 30
     start_period: 20s
-  mem_limit: 512m
+  mem_limit: 640m
   restart: unless-stopped
   networks: [teleclinic, ai-zone, interop]
 

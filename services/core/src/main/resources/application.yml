@@ -45,6 +45,11 @@ server:
   port: 8080
   # Host, scheme and port come from the edge (HAProxy sets X-Forwarded-*; APISIX passes the Host)
   forward-headers-strategy: framework
+  # HAProxy lets at most 80 requests in flight per instance (config/haproxy/haproxy.cfg), internal callers included;
+  # the spare threads serve its health checks and the metrics scrapes, which bypass that limit
+  tomcat:
+    threads:
+      max: 100
   servlet:
     session:
       timeout: 30m
