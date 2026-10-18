@@ -21,6 +21,7 @@ Full reasoning is in section 5 of the design document. Do not reverse these with
 | 016 | Hash-chained audit + write-once archive | Tamper evidence with tools the team already runs |
 | 017 | Demo observability: Prometheus + Grafana, metrics only; alert rules and dashboards as code | Lighter than the single LGTM image on a 16 GB host; logs and traces stay documented for production |
 | 018 | Outbound EMR writes: a queue in the core that the OpenFn workflow pulls (started at once by a webhook), not a Kafka trigger | A Kafka trigger consumes events at once even when the EMR is down, so 'writes wait' becomes failed runs; the pulled queue keeps order, backs off and dead-letters |
+| 019 | Two kinds of EMR targets, chosen by the patient's home facility: eBuzima (one central multi-tenant instance; the health centre is the tenant) and each hospital's own OpenMRS. Every EMR is FHIR at the core boundary (the gateway maps eBuzima's documents); eBuzima pushes a change notice (document webhook) and the gateway pulls since its cursor | Matches how Rwanda deploys EMRs by level; one inbound contract in the core; push for latency, pull for completeness, schedule as safety net |
 
 ## Targets (proposed, replace with measured numbers)
 Availability 99.95%; DB failover under 60 s with zero lost committed writes; USSD step p95 under 1.5 s; rules p95 under 100 ms; sync lag p95 under 5 s; DR RTO under 4 h and RPO under 5 min.

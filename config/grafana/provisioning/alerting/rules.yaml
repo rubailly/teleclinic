@@ -403,7 +403,7 @@ groups:
       severity: warning
       service: teleclinic
     annotations:
-      summary: A write to the facility EMR has waited more than 2 minutes (the EMR is offline or rejecting writes).
+      summary: A write to an EMR (eBuzima or a hospital's OpenMRS) has waited more than 2 minutes (the EMR is offline or rejecting writes).
       description: Clinicians keep working; the writes are safe in the queue and retried with backoff.
       runbook_url: http://127.0.0.1:9500/runbooks/emr-sync-backlog
       __dashboardUid__: teleclinic-slo

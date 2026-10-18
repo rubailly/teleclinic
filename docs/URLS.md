@@ -13,7 +13,8 @@
 | Runbooks | http://127.0.0.1:9500/runbooks/ | One per alert; linked from each alert rule |
 | Prometheus | http://127.0.0.1:9790 | Targets, raw queries. Local only |
 | Identity review (clerk) | http://localhost:9080/clerk/ | Sign in as `clerk1` |
-| OpenMRS O3 (facility EMR) | http://localhost:9880/openmrs/spa | `admin`, password `OPENMRS_ADMIN_PASSWORD` in `.env`; location Demo Health Centre |
+| eBuzima stand-in (health centres; ERPNext + Healthcare) | http://localhost:9580 | `Administrator`, password `EBUZIMA_ADMIN_PASSWORD` in `.env`; the Kimironko nurse is `nurse.kimironko@ebuzima.local`, password `EBUZIMA_NURSE_PASSWORD` |
+| OpenMRS O3 (Kibagabaga District Hospital) | http://localhost:9880/openmrs/spa | `admin`, password `OPENMRS_ADMIN_PASSWORD` in `.env`; location Kibagabaga District Hospital |
 | OpenFn Lightning (sync gateway) | http://localhost:9480 | `admin@teleclinic.local`, password `OPENFN_ADMIN_PASSWORD` in `.env`; run history |
 | Ops cockpit | http://127.0.0.1:9500 | Runs the failure scenarios; live probes, nodes, reconciliation. Local only |
 | USSD phone simulator | http://localhost:9380 | Labelled simulator; demo numbers +250788000001 (Uwase) and +250788000002 (Eric), PIN `1234` |

@@ -238,6 +238,11 @@ paths:
       parameters:
         - {name: resourceType, in: path, required: true, schema: {type: string}}
         - {$ref: '#/components/parameters/ResourceId'}
+        - name: externalSystem
+          in: query
+          required: false
+          description: One EMR's entry (a record can be known to eBuzima and to a hospital's OpenMRS); default, the most recently synced
+          schema: {type: string, example: ebuzima}
       security: [{oidc: [system/Sync.read]}]
       responses:
         '200':
@@ -368,7 +373,7 @@ components:
       properties:
         resourceType: {type: string}
         teleclinicId: {type: string}
-        externalSystem: {type: string, example: openmrs-facility-12}
+        externalSystem: {type: string, example: ebuzima}
         externalId: {type: string}
         lastSyncedVersion: {type: integer}
         contentHash: {type: string}
@@ -379,7 +384,10 @@ components:
       type: object
       required: [externalSystem, resource, origin, contentHash]
       properties:
-        externalSystem: {type: string}
+        externalSystem:
+          type: string
+          description: The EMR the change comes from, as the facility registry names it (eBuzima for every health centre, or a hospital's OpenMRS)
+          example: ebuzima
         resource: {$ref: '#/components/schemas/FhirResource'}
         origin: {type: string}
         contentHash: {type: string}
