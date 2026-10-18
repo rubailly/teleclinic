@@ -44,6 +44,30 @@ public class PatientDirectory {
         return jdbc.sql("SELECT * FROM patient_index.patient WHERE id = ?").param(id).query(PATIENT).optional();
     }
 
+    /** Every patient; the identity matcher blocks and scores against this (small in the demo, a search index in production). */
+    public List<Patient> all() {
+        return jdbc.sql("SELECT * FROM patient_index.patient ORDER BY family_name, given_name").query(PATIENT).list();
+    }
+
+    /** The number to reach a patient on: their own, or for a dependant without one, a verified guardian's. */
+    public Optional<String> contactPhone(UUID id) {
+        Optional<String> own = findById(id).map(Patient::phone);
+        if (own.isPresent()) {
+            return own;
+        }
+        return jdbc.sql("""
+                        SELECT g.phone FROM patient_index.related_person r
+                        JOIN patient_index.patient g ON g.irembo_subject = r.guardian_subject
+                        WHERE r.patient_id = ? AND r.verified AND g.phone IS NOT NULL ORDER BY g.phone LIMIT 1""")
+                .param(id).query(String.class).optional();
+    }
+
+    /** Contact details are EMR-authoritative: the sync gateway applies a phone changed in the facility record. */
+    @Transactional
+    public void updatePhone(UUID id, String phone) {
+        jdbc.sql("UPDATE patient_index.patient SET phone = ? WHERE id = ?").params(phone, id).update();
+    }
+
     public Patient require(UUID id) {
         return findById(id).orElseThrow(() -> ApiException.notFound("Patient " + id + " not found"));
     }
