@@ -8,7 +8,7 @@ MAVEN := docker run --rm -v "$(CURDIR)/services/core":/w -v teleclinic-m2:/root/
 	-v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
 	--add-host=host.docker.internal:host-gateway maven:3.9.9-eclipse-temurin-21 mvn -B -q $(MVN_NET)
 
-.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition ussd clinician logs ps release-up
+.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition ussd scenario-webhooks clinician logs ps release-up
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -53,6 +53,9 @@ scenario-partition: .env ## Scene 4b: isolate the leader's node; minority demote
 
 ussd: .env ## Scene 1: book for a child from a basic phone (USSD), pay by mobile money, get an SMS
 	./scripts/smoke/ussd.sh
+
+scenario-webhooks: .env ## Scene 1c: replay the last payment webhook twice and forge one; nothing changes
+	./scripts/scenarios/duplicate-webhooks.sh
 
 clinician: .env ## Scene 2: AI-proposed case, orders refused until FINAL, override, kill switch
 	./scripts/smoke/clinician.sh

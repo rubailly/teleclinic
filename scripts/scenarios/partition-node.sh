@@ -68,9 +68,16 @@ note "pg-$n is back as $st"
 members "$first"
 
 step "7. no divergent rows: every node has the same rows"
-sleep 2
-counts=$(for k in 1 2 3; do pg_local "$k" "SELECT count(*) || ':' || coalesce(max(id),0) FROM ha_probe"; done | sort -u)
-note "rows:max(id) per node -> $(echo $counts)"
+# Writes may still be running (the cockpit probes all the time), so compare a fixed range: every row up to the
+# leader's current highest id, once each node has replayed that far.
+lead=$(leader "$first" | sed 's/pg-//')
+cut=$(pg_local "$lead" "SELECT max(id) FROM ha_probe")
+q="SELECT count(*) || ':' || md5(string_agg(id || note, ',' ORDER BY id)) FROM ha_probe WHERE id <= $cut"
+for i in $(seq 1 30); do
+  counts=$(for k in 1 2 3; do pg_local "$k" "$q"; done | sort -u)
+  [ "$(echo "$counts" | wc -l)" = 1 ] && break; sleep 1
+done
+note "rows up to id $cut, count:checksum per node -> $(echo $counts | cut -c1-60)"
 [ "$(echo "$counts" | wc -l)" = 1 ] || fail "nodes differ after heal"
 [ "$(pg_local "$n" "SELECT count(*) FROM ha_probe WHERE note = 'written on the minority side'")" = 0 ] || fail "minority write survived"
 
