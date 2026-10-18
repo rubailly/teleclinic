@@ -20,7 +20,7 @@ import rw.teleclinic.core.shared.ApiException;
 
 /**
  * What the sync gateway calls. /sync/inbound and /sync/ledger follow api/teleclinic-interop-api.yaml; the outbound
- * queue is internal (the gateway pulls it). The public edge refuses both /internal/* and /sync/inbound.
+ * queue is internal (the gateway pulls it, one EMR per workflow: ?system=ebuzima or ?system=openmrs-...). The public edge refuses both /internal/* and /sync/inbound.
  */
 @RestController
 class SyncController {
@@ -51,9 +51,9 @@ class SyncController {
 
     @GetMapping("/internal/sync/outbound/due")
     Map<String, Object> due(@RequestHeader(value = "X-Sync-Key", required = false) String key,
-                            @RequestParam(defaultValue = "20") int limit) {
+                            @RequestParam String system, @RequestParam(defaultValue = "20") int limit) {
         gateway(key);
-        return Map.of("items", queue.due(limit));
+        return Map.of("items", queue.due(system, limit));
     }
 
     @PostMapping("/internal/sync/outbound/{id}/done")
@@ -73,21 +73,22 @@ class SyncController {
     }
 
     @PostMapping("/internal/sync/outbound/replay")
-    Map<String, Object> replay(@RequestHeader(value = "X-Sync-Key", required = false) String key) {
+    Map<String, Object> replay(@RequestHeader(value = "X-Sync-Key", required = false) String key, @RequestParam String system) {
         gateway(key);
-        return Map.of("replayed", queue.replay());
+        return Map.of("replayed", queue.replay(system));
     }
 
     @GetMapping("/internal/sync/inbound/since")
-    Map<String, Object> since(@RequestHeader(value = "X-Sync-Key", required = false) String key) {
+    Map<String, Object> since(@RequestHeader(value = "X-Sync-Key", required = false) String key, @RequestParam String system) {
         gateway(key);
-        return Map.of("since", inbound.since().toString());
+        return Map.of("since", inbound.since(system).toString());
     }
 
     @PostMapping("/internal/sync/inbound/cursor")
-    Map<String, Object> cursor(@RequestHeader(value = "X-Sync-Key", required = false) String key, @RequestBody Cursor body) {
+    Map<String, Object> cursor(@RequestHeader(value = "X-Sync-Key", required = false) String key, @RequestParam String system,
+                               @RequestBody Cursor body) {
         gateway(key);
-        inbound.advance(body.polledAt());
+        inbound.advance(system, body.polledAt());
         return Map.of("cursor", body.polledAt().toString());
     }
 
@@ -100,7 +101,7 @@ class SyncController {
         if (change.resource() == null || !"Patient".equals(change.resource().path("resourceType").asText())) {
             throw ApiException.unprocessable("invalid", "resource must be a FHIR Patient");
         }
-        InboundSync.Outcome o = inbound.receive(change.resource());
+        InboundSync.Outcome o = inbound.receive(change.externalSystem(), change.resource());
         Map<String, Object> body = new java.util.LinkedHashMap<>();
         body.put("outcome", o.outcome());
         body.put("teleclinicPatient", o.patientId() == null ? null : "Patient/" + o.patientId());
@@ -108,9 +109,13 @@ class SyncController {
         return ResponseEntity.status(o.echo() ? HttpStatus.OK : HttpStatus.ACCEPTED).body(body);
     }
 
+    /** One EMR's entry (?externalSystem=), or else the most recently synced one. */
     @GetMapping("/sync/ledger/{resourceType}/{id}")
-    Map<String, Object> ledgerEntry(@PathVariable String resourceType, @PathVariable String id) {
-        return ledger.byTeleclinicId(resourceType, id).map(e -> ledger.view(e, props.externalSystem()))
+    Map<String, Object> ledgerEntry(@PathVariable String resourceType, @PathVariable String id,
+                                    @RequestParam(required = false) String externalSystem) {
+        return (externalSystem == null ? ledger.byTeleclinicId(resourceType, id).stream().findFirst()
+                        : ledger.byTeleclinicId(externalSystem, resourceType, id))
+                .map(ledger::view)
                 .orElseThrow(() -> ApiException.notFound("No ledger entry for " + resourceType + "/" + id));
     }
 

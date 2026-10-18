@@ -27,6 +27,7 @@ class EmrSyncTests extends IntegrationTest {
 
     static final String KEY = "test-sync-key";
     static final String CLERK = "00000000-0000-4000-a000-000000000004";
+    static final String HOSPITAL = "openmrs-kibagabaga";
 
     @Autowired
     MockMvc mvc;
@@ -56,11 +57,15 @@ class EmrSyncTests extends IntegrationTest {
         return json.valueToTree(p);
     }
 
-    private org.springframework.test.web.servlet.ResultActions inbound(JsonNode patient) throws Exception {
+    private org.springframework.test.web.servlet.ResultActions inbound(String system, JsonNode patient) throws Exception {
         return mvc.perform(post("/sync/inbound").header("X-Sync-Key", KEY).header("Idempotency-Key", UUID.randomUUID().toString())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(Map.of("externalSystem", "openmrs-demo-facility", "resource", patient,
-                        "origin", "openmrs", "contentHash", "x"))));
+                .content(json.writeValueAsString(Map.of("externalSystem", system, "resource", patient,
+                        "origin", system, "contentHash", "x"))));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions inbound(JsonNode patient) throws Exception {
+        return inbound(HOSPITAL, patient);
     }
 
     @Test
@@ -69,45 +74,51 @@ class EmrSyncTests extends IntegrationTest {
         mvc.perform(post("/api/patients/" + keza + "/consents").with(signedInAs(UWASE, "patient1", "patient")).with(csrf()))
                 .andExpect(status().is2xxSuccessful());
         UUID consultation = UUID.randomUUID();
+        // Keza is registered at Kimironko Health Centre: the encounter goes to eBuzima, in that health centre's tenant
         assertThat(queue.enqueueEncounter(new TriageFinalised(consultation, keza, "USSD", "URGENT", "CONFIRM", null,
-                "Dr Mukamana", Instant.now()))).isTrue();
+                "Dr Mukamana", Instant.now()))).isEqualTo("ebuzima");
         assertThat(queue.enqueueEncounter(new TriageFinalised(consultation, keza, "USSD", "URGENT", "CONFIRM", null,
-                "Dr Mukamana", Instant.now()))).as("same consultation queued once").isFalse();
-        SyncQueue.Item item = queue.due(50).stream().filter(i -> i.reference().equals(consultation.toString())).findFirst().orElseThrow();
+                "Dr Mukamana", Instant.now()))).as("same consultation queued once").isNull();
+        assertThat(queue.due(HOSPITAL, 50)).noneMatch(i -> i.reference().equals(consultation.toString()));
+        SyncQueue.Item item = queue.due("ebuzima", 50).stream().filter(i -> i.reference().equals(consultation.toString())).findFirst().orElseThrow();
         assertThat(item.payload().path("patient").path("upi").asText()).isEqualTo("180514-0000-0001");
+        assertThat(item.payload().path("facility").path("tenant").asText()).isEqualTo("Kimironko Health Centre");
 
         // The gateway wrote it; the EMR record as it now reads becomes the ledger's hash
         JsonNode written = emrPatient("emr-keza", "Keza", "Demo", "female", "2018-05-14", null,
                 Map.of("TeleClinic ID", keza.toString(), "UPI", "180514-0000-0001"));
         queue.done(item.id(), "CREATED", written, "emr-encounter-1");
-        assertThat(queue.due(50)).noneMatch(i -> i.id().equals(item.id()));
+        assertThat(queue.due("ebuzima", 50)).noneMatch(i -> i.id().equals(item.id()));
 
-        inbound(written).andExpect(status().isOk()).andExpect(jsonPath("$.outcome").value("ECHO_DROPPED"));
+        inbound("ebuzima", written).andExpect(status().isOk()).andExpect(jsonPath("$.outcome").value("ECHO_DROPPED"));
 
         JsonNode edited = emrPatient("emr-keza", "Keza", "Demo", "female", "2018-05-14", "+250788000777",
                 Map.of("TeleClinic ID", keza.toString(), "UPI", "180514-0000-0001"));
-        inbound(edited).andExpect(status().isAccepted()).andExpect(jsonPath("$.outcome").value("APPLIED"));
+        inbound("ebuzima", edited).andExpect(status().isAccepted()).andExpect(jsonPath("$.outcome").value("APPLIED"));
         assertThat(jdbc.sql("SELECT phone FROM patient_index.patient WHERE id = ?").param(keza).query(String.class).single())
                 .isEqualTo("+250788000777");
-        assertThat(jdbc.sql("SELECT count(*) FROM audit.event WHERE patient_id = ? AND actor = 'openmrs-sync' AND action = 'UPDATE'")
+        assertThat(jdbc.sql("SELECT count(*) FROM audit.event WHERE patient_id = ? AND actor = 'ebuzima' AND action = 'UPDATE'")
                 .param(keza).query(Long.class).single()).isEqualTo(1);
         // The same change seen again (the next poll overlaps) is an echo, and nothing goes back out
-        inbound(edited).andExpect(status().isOk()).andExpect(jsonPath("$.outcome").value("ECHO_DROPPED"));
-        assertThat(queue.due(50)).noneMatch(i -> i.patientId().equals(keza));
+        inbound("ebuzima", edited).andExpect(status().isOk()).andExpect(jsonPath("$.outcome").value("ECHO_DROPPED"));
+        assertThat(queue.due("ebuzima", 50)).noneMatch(i -> i.patientId().equals(keza));
+        // Record ids are per EMR: the hospital's record with the same id is someone else, and is matched as a stranger
+        inbound(HOSPITAL, emrPatient("emr-keza", "Pacifique", "Nkurunziza", "male", "1975-11-02", null, Map.of()))
+                .andExpect(jsonPath("$.outcome").value("NO_MATCH"));
     }
 
     @Test
     void a_write_that_keeps_failing_backs_off_then_becomes_a_dead_letter_that_can_be_replayed() {
         UUID ref = UUID.randomUUID();
-        queue.enqueueIdentifiers("ADD_IDENTIFIER", ref, UUID.fromString(UWASE_PATIENT_ID), "emr-x", Map.of("teleclinicId", "x"));
-        UUID id = queue.due(100).stream().filter(i -> i.reference().equals(ref.toString())).findFirst().orElseThrow().id();
+        queue.enqueueIdentifiers("ADD_IDENTIFIER", HOSPITAL, ref, UUID.fromString(UWASE_PATIENT_ID), "emr-x", Map.of("teleclinicId", "x"));
+        UUID id = queue.due(HOSPITAL, 100).stream().filter(i -> i.reference().equals(ref.toString())).findFirst().orElseThrow().id();
         queue.failed(id, "connection refused");
-        assertThat(queue.due(100)).as("waiting out its backoff").noneMatch(i -> i.id().equals(id));
+        assertThat(queue.due(HOSPITAL, 100)).as("waiting out its backoff").noneMatch(i -> i.id().equals(id));
         jdbc.sql("UPDATE sync.outbound SET attempts = 9, next_attempt_at = now() WHERE id = ?").param(id).update();
         queue.failed(id, "connection refused");
         assertThat(jdbc.sql("SELECT status FROM sync.outbound WHERE id = ?").param(id).query(String.class).single()).isEqualTo("DEAD");
-        assertThat(queue.replay()).isGreaterThanOrEqualTo(1);
-        assertThat(queue.due(100)).anyMatch(i -> i.id().equals(id));
+        assertThat(queue.replay(HOSPITAL)).isGreaterThanOrEqualTo(1);
+        assertThat(queue.due(HOSPITAL, 100)).anyMatch(i -> i.id().equals(id));
     }
 
     @Test
@@ -150,8 +161,11 @@ class EmrSyncTests extends IntegrationTest {
 
     @Test
     void only_the_gateway_may_call_the_sync_endpoints() throws Exception {
-        mvc.perform(get("/internal/sync/outbound/due")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/internal/sync/outbound/due").header("X-Sync-Key", "wrong")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/internal/sync/outbound/due").header("X-Sync-Key", KEY)).andExpect(status().isOk());
+        mvc.perform(get("/internal/sync/outbound/due").param("system", "ebuzima")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/internal/sync/outbound/due").param("system", "ebuzima").header("X-Sync-Key", "wrong"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/internal/sync/outbound/due").param("system", "ebuzima").header("X-Sync-Key", KEY)).andExpect(status().isOk());
+        mvc.perform(get("/internal/sync/outbound/due").param("system", "unknown-emr").header("X-Sync-Key", KEY))
+                .andExpect(status().isUnprocessableEntity());
     }
 }

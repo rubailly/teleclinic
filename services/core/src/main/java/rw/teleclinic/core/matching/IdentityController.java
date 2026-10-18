@@ -77,6 +77,7 @@ class IdentityController {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("link", decision(l));
             m.put("patient", fhir(patients.require(l.patientId())));
+            m.put("emr", l.system());
             m.put("writtenIdentifiers", l.writtenIdentifiers());
             return m;
         }).toList();
@@ -92,7 +93,8 @@ class IdentityController {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", c.id());
         m.put("left", fhir(patients.require(c.patientId())));
-        m.put("right", fhir(c.emr()));
+        m.put("right", fhir(c.system(), c.emr()));
+        m.put("emr", c.system());
         m.put("score", c.score());
         m.put("agreeingFields", c.agreeing());
         m.put("conflictingFields", c.conflicting());
@@ -116,9 +118,15 @@ class IdentityController {
                 identifiers(p.nationalId(), p.upi(), null));
     }
 
-    static Map<String, Object> fhir(EmrPatient e) {
-        return resource(e.emrUuid(), "OpenMRS (facility EMR)", e.givenName(), e.familyName(), e.sex(), e.birthDate(), e.phone(),
+    static Map<String, Object> fhir(String system, EmrPatient e) {
+        return resource(e.emrUuid(), source(system), e.givenName(), e.familyName(), e.sex(), e.birthDate(), e.phone(),
                 identifiers(e.nationalId(), e.upi(), e.emrIdentifier()));
+    }
+
+    /** The EMR a record comes from, as a clerk knows it. */
+    static String source(String system) {
+        return "ebuzima".equals(system) ? "eBuzima (health centre EMR)"
+                : system.startsWith("openmrs") ? "OpenMRS (hospital EMR)" : system;
     }
 
     private static List<Map<String, String>> identifiers(String nationalId, String upi, String emrId) {

@@ -1,16 +1,17 @@
 package rw.teleclinic.core.emrsync;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
-/** Per record: TeleClinic id, EMR id, the EMR's version and the content hash last seen. Plus a short event log for operators. */
+/** Per EMR and record: TeleClinic id, EMR id, the EMR's version and the content hash last seen. Plus a short event log for operators. */
 @Component
 class SyncLedger {
 
-    record Entry(String resourceType, String teleclinicId, String emrUuid, String emrVersion, String contentHash,
+    record Entry(String system, String resourceType, String teleclinicId, String emrUuid, String emrVersion, String contentHash,
                  String direction, Instant syncedAt) {
     }
 
@@ -20,40 +21,49 @@ class SyncLedger {
         this.jdbc = jdbc;
     }
 
-    void record(String resourceType, String teleclinicId, String emrUuid, String version, String hash, String direction) {
-        // The EMR id is unique per resource type: a previous mapping of the same EMR record is replaced
-        jdbc.sql("DELETE FROM sync.ledger WHERE resource_type = ? AND emr_uuid = ? AND teleclinic_id <> ?")
-                .params(resourceType, emrUuid, teleclinicId).update();
+    void record(String system, String resourceType, String teleclinicId, String emrUuid, String version, String hash, String direction) {
+        // The EMR id is unique per EMR and resource type: a previous mapping of the same EMR record is replaced
+        jdbc.sql("DELETE FROM sync.ledger WHERE system = ? AND resource_type = ? AND emr_uuid = ? AND teleclinic_id <> ?")
+                .params(system, resourceType, emrUuid, teleclinicId).update();
         jdbc.sql("""
-                        INSERT INTO sync.ledger (resource_type, teleclinic_id, emr_uuid, emr_version, content_hash, direction, synced_at)
-                        VALUES (?, ?, ?, ?, ?, ?, now())
-                        ON CONFLICT (resource_type, teleclinic_id) DO UPDATE SET emr_uuid = excluded.emr_uuid,
+                        INSERT INTO sync.ledger (system, resource_type, teleclinic_id, emr_uuid, emr_version, content_hash, direction, synced_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, now())
+                        ON CONFLICT (system, resource_type, teleclinic_id) DO UPDATE SET emr_uuid = excluded.emr_uuid,
                             emr_version = excluded.emr_version, content_hash = excluded.content_hash,
                             direction = excluded.direction, synced_at = now()""")
-                .params(resourceType, teleclinicId, emrUuid, version, hash, direction).update();
+                .params(system, resourceType, teleclinicId, emrUuid, version, hash, direction).update();
     }
 
-    void forget(String resourceType, String teleclinicId) {
-        jdbc.sql("DELETE FROM sync.ledger WHERE resource_type = ? AND teleclinic_id = ?").params(resourceType, teleclinicId).update();
+    void forget(String system, String resourceType, String teleclinicId) {
+        jdbc.sql("DELETE FROM sync.ledger WHERE system = ? AND resource_type = ? AND teleclinic_id = ?")
+                .params(system, resourceType, teleclinicId).update();
     }
 
-    Optional<Entry> byTeleclinicId(String resourceType, String teleclinicId) {
-        return jdbc.sql("SELECT * FROM sync.ledger WHERE resource_type = ? AND teleclinic_id = ?").params(resourceType, teleclinicId)
-                .query((rs, n) -> entry(rs)).optional();
+    Optional<Entry> byTeleclinicId(String system, String resourceType, String teleclinicId) {
+        return jdbc.sql("SELECT * FROM sync.ledger WHERE system = ? AND resource_type = ? AND teleclinic_id = ?")
+                .params(system, resourceType, teleclinicId).query((rs, n) -> entry(rs)).optional();
     }
 
-    Optional<Entry> byEmrUuid(String resourceType, String emrUuid) {
-        return jdbc.sql("SELECT * FROM sync.ledger WHERE resource_type = ? AND emr_uuid = ?").params(resourceType, emrUuid)
-                .query((rs, n) -> entry(rs)).optional();
+    /** Every EMR's entry for one TeleClinic record, most recently synced first. */
+    List<Entry> byTeleclinicId(String resourceType, String teleclinicId) {
+        return jdbc.sql("SELECT * FROM sync.ledger WHERE resource_type = ? AND teleclinic_id = ? ORDER BY synced_at DESC")
+                .params(resourceType, teleclinicId).query((rs, n) -> entry(rs)).list();
     }
 
-    void event(String direction, String resourceType, String teleclinicId, String emrUuid, String outcome, String detail) {
-        jdbc.sql("INSERT INTO sync.event (direction, resource_type, teleclinic_id, emr_uuid, outcome, detail) VALUES (?, ?, ?, ?, ?, ?)")
-                .params(direction, resourceType, teleclinicId, emrUuid, outcome, detail).update();
+    Optional<Entry> byEmrUuid(String system, String resourceType, String emrUuid) {
+        return jdbc.sql("SELECT * FROM sync.ledger WHERE system = ? AND resource_type = ? AND emr_uuid = ?")
+                .params(system, resourceType, emrUuid).query((rs, n) -> entry(rs)).optional();
     }
 
-    Map<String, Object> view(Entry e, String externalSystem) {
-        return Map.of("resourceType", e.resourceType(), "teleclinicId", e.teleclinicId(), "externalSystem", externalSystem,
+    void event(String system, String direction, String resourceType, String teleclinicId, String emrUuid, String outcome, String detail) {
+        jdbc.sql("""
+                        INSERT INTO sync.event (system, direction, resource_type, teleclinic_id, emr_uuid, outcome, detail)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)""")
+                .params(system, direction, resourceType, teleclinicId, emrUuid, outcome, detail).update();
+    }
+
+    Map<String, Object> view(Entry e) {
+        return Map.of("resourceType", e.resourceType(), "teleclinicId", e.teleclinicId(), "externalSystem", e.system(),
                 "externalId", e.emrUuid(), "contentHash", e.contentHash(),
                 "origin", "OUTBOUND".equals(e.direction()) ? "teleclinic" : "external",
                 "lastSyncedAt", e.syncedAt().toString(), "status", "IN_SYNC",
@@ -61,7 +71,7 @@ class SyncLedger {
     }
 
     private static Entry entry(java.sql.ResultSet rs) throws java.sql.SQLException {
-        return new Entry(rs.getString("resource_type"), rs.getString("teleclinic_id"), rs.getString("emr_uuid"),
+        return new Entry(rs.getString("system"), rs.getString("resource_type"), rs.getString("teleclinic_id"), rs.getString("emr_uuid"),
                 rs.getString("emr_version"), rs.getString("content_hash"), rs.getString("direction"),
                 rs.getTimestamp("synced_at").toInstant());
     }

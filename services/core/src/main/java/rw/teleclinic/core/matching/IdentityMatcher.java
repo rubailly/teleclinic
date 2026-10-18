@@ -36,11 +36,11 @@ public class IdentityMatcher {
     public record Resolution(Optional<UUID> patientId, String outcome) {
     }
 
-    record Candidate(UUID id, String emrUuid, UUID patientId, EmrPatient emr, double score, String band,
+    record Candidate(UUID id, String system, String emrUuid, UUID patientId, EmrPatient emr, double score, String band,
                      List<String> agreeing, List<String> conflicting, String status, String decidedBy, String reason) {
     }
 
-    record Link(UUID id, UUID patientId, String emrUuid, double score, String decidedBy, String reason,
+    record Link(UUID id, UUID patientId, String system, String emrUuid, double score, String decidedBy, String reason,
                 java.time.Instant decidedAt, Map<String, String> writtenIdentifiers) {
     }
 
@@ -65,15 +65,15 @@ public class IdentityMatcher {
         }
     }
 
-    public Optional<UUID> linkedPatient(String emrUuid) {
-        return jdbc.sql("SELECT patient_id FROM matching.link WHERE emr_uuid = ? AND active").param(emrUuid)
+    public Optional<UUID> linkedPatient(String system, String emrUuid) {
+        return jdbc.sql("SELECT patient_id FROM matching.link WHERE system = ? AND emr_uuid = ? AND active").params(system, emrUuid)
                 .query(UUID.class).optional();
     }
 
-    /** Blocking, scoring and the three bands for one EMR record that TeleClinic does not know yet. */
+    /** Blocking, scoring and the three bands for one record of that EMR that TeleClinic does not know yet. */
     @Transactional
-    public Resolution consider(EmrPatient emr) {
-        Optional<UUID> linked = linkedPatient(emr.emrUuid());
+    public Resolution consider(String system, EmrPatient emr) {
+        Optional<UUID> linked = linkedPatient(system, emr.emrUuid());
         if (linked.isPresent()) {
             return count(new Resolution(linked, "LINKED"));
         }
@@ -82,20 +82,20 @@ public class IdentityMatcher {
                 .map(p -> Map.entry(p, MatchScore.of(p, emr)))
                 .toList();
         pairs.stream().filter(e -> e.getValue().band() == Band.BLOCKED)
-                .forEach(e -> upsertCandidate(e.getKey(), emr, e.getValue(), "BLOCKED"));
+                .forEach(e -> upsertCandidate(system, e.getKey(), emr, e.getValue(), "BLOCKED"));
         Optional<Map.Entry<Patient, MatchScore>> best = pairs.stream()
                 .filter(e -> e.getValue().band() != Band.BLOCKED)
                 .max(Comparator.comparingDouble(e -> e.getValue().score()));
         if (best.isPresent() && best.get().getValue().band() == Band.AUTO) {
             Patient p = best.get().getKey();
             MatchScore s = best.get().getValue();
-            UUID candidate = upsertCandidate(p, emr, s, "LINKED");
-            createLink(candidate, p, emr, s.score(), MATCHER, "auto",
+            UUID candidate = upsertCandidate(system, p, emr, s, "LINKED");
+            createLink(candidate, system, p, emr, s.score(), MATCHER, "auto",
                     s.strongAgreements() + " strong identifiers agree: " + String.join(", ", s.agreeing()));
             return count(new Resolution(Optional.of(p.id()), "AUTO_LINKED"));
         }
         if (best.isPresent() && best.get().getValue().band() == Band.REVIEW) {
-            upsertCandidate(best.get().getKey(), emr, best.get().getValue(), "PENDING");
+            upsertCandidate(system, best.get().getKey(), emr, best.get().getValue(), "PENDING");
             return count(new Resolution(Optional.empty(), "REVIEW"));
         }
         boolean blocked = pairs.stream().anyMatch(e -> e.getValue().band() == Band.BLOCKED);
@@ -104,17 +104,17 @@ public class IdentityMatcher {
 
     /** The gateway's conditional create found the EMR record by a national identifier: record it as an automatic link. */
     @Transactional
-    public void recordAdoption(UUID patientId, String emrUuid, String how) {
-        if (linkedPatient(emrUuid).isPresent()) {
+    public void recordAdoption(UUID patientId, String system, String emrUuid, String how) {
+        if (linkedPatient(system, emrUuid).isPresent()) {
             return;
         }
         UUID id = UUID.randomUUID();
         jdbc.sql("""
-                        INSERT INTO matching.link (id, patient_id, emr_uuid, score, decided_by, reason, written_identifiers)
-                        VALUES (?, ?, ?, NULL, 'auto', ?, '{}'::jsonb)""")
-                .params(id, patientId, emrUuid, how).update();
+                        INSERT INTO matching.link (id, patient_id, system, emr_uuid, score, decided_by, reason, written_identifiers)
+                        VALUES (?, ?, ?, ?, NULL, 'auto', ?, '{}'::jsonb)""")
+                .params(id, patientId, system, emrUuid, how).update();
         audit.record(MATCHER, "LINK", "Patient", patientId.toString(), patientId, "OPERATIONS", "identity-matching",
-                "SUCCESS", how, Map.of("emrPatient", emrUuid, "linkId", id.toString()));
+                "SUCCESS", how, Map.of("emr", system, "emrPatient", emrUuid, "linkId", id.toString()));
     }
 
     @Transactional
@@ -122,13 +122,13 @@ public class IdentityMatcher {
         Candidate c = candidates("c.patient_id = ? AND c.emr_uuid = ? AND c.status = 'PENDING'", patientId, emrUuid).stream()
                 .findFirst().orElseThrow(() -> ApiException.conflict("not-in-queue",
                         "No pending review for Patient/" + patientId + " and EMR record " + emrUuid));
-        if (linkedPatient(emrUuid).isPresent()) {
+        if (linkedPatient(c.system(), emrUuid).isPresent()) {
             throw ApiException.conflict("already-linked", "EMR record " + emrUuid + " is already linked");
         }
         Patient p = patients.require(patientId);
         jdbc.sql("UPDATE matching.candidate SET status = 'LINKED', decided_by = ?, decided_at = now(), reason = ? WHERE id = ?")
                 .params(clerk.subject(), reason, c.id()).update();
-        return createLink(c.id(), p, c.emr(), c.score(), clerk, clerk.subject(), reason);
+        return createLink(c.id(), c.system(), p, c.emr(), c.score(), clerk, clerk.subject(), reason);
     }
 
     @Transactional
@@ -149,11 +149,11 @@ public class IdentityMatcher {
                 .params(clerk.subject(), reason, linkId).update();
         // Back in the queue as undecided, so a corrected decision can be made later
         jdbc.sql("UPDATE matching.candidate SET status = 'PENDING', decided_by = NULL, decided_at = NULL, reason = NULL "
-                        + "WHERE patient_id = ? AND emr_uuid = ? AND status = 'LINKED'")
-                .params(l.patientId(), l.emrUuid()).update();
+                        + "WHERE system = ? AND patient_id = ? AND emr_uuid = ? AND status = 'LINKED'")
+                .params(l.system(), l.patientId(), l.emrUuid()).update();
         audit.record(clerk, "UNLINK", "Patient", l.patientId().toString(), l.patientId(), "OPERATIONS", "identity-review",
-                "SUCCESS", reason, Map.of("emrPatient", l.emrUuid(), "linkId", linkId.toString()));
-        events.publishEvent(new PatientUnlinked(linkId, l.patientId(), l.emrUuid(), l.writtenIdentifiers()));
+                "SUCCESS", reason, Map.of("emr", l.system(), "emrPatient", l.emrUuid(), "linkId", linkId.toString()));
+        events.publishEvent(new PatientUnlinked(linkId, l.patientId(), l.system(), l.emrUuid(), l.writtenIdentifiers()));
     }
 
     List<Candidate> queue() {
@@ -168,7 +168,7 @@ public class IdentityMatcher {
         return links("active ORDER BY decided_at DESC");
     }
 
-    private Link createLink(UUID candidateId, Patient p, EmrPatient emr, double score, Actor by, String decidedBy, String reason) {
+    private Link createLink(UUID candidateId, String system, Patient p, EmrPatient emr, double score, Actor by, String decidedBy, String reason) {
         // What the EMR record should learn: TeleClinic's id, and national identifiers it is missing
         Map<String, String> write = new LinkedHashMap<>();
         write.put("teleclinicId", p.id().toString());
@@ -180,19 +180,19 @@ public class IdentityMatcher {
         }
         UUID id = UUID.randomUUID();
         jdbc.sql("""
-                        INSERT INTO matching.link (id, patient_id, emr_uuid, score, decided_by, reason, written_identifiers, candidate_id)
-                        VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?)""")
-                .params(id, p.id(), emr.emrUuid(), score, decidedBy, reason, toJson(write), candidateId).update();
+                        INSERT INTO matching.link (id, patient_id, system, emr_uuid, score, decided_by, reason, written_identifiers, candidate_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)""")
+                .params(id, p.id(), system, emr.emrUuid(), score, decidedBy, reason, toJson(write), candidateId).update();
         audit.record(by, "LINK", "Patient", p.id().toString(), p.id(), "OPERATIONS", "identity-review", "SUCCESS", reason,
-                Map.of("emrPatient", emr.emrUuid(), "score", Double.toString(score), "linkId", id.toString()));
-        events.publishEvent(new PatientLinked(id, p.id(), emr.emrUuid(), write));
-        log.info("Linked TeleClinic patient {} to EMR record {} ({}, score {})", p.id(), emr.emrUuid(), decidedBy, score);
+                Map.of("emr", system, "emrPatient", emr.emrUuid(), "score", Double.toString(score), "linkId", id.toString()));
+        events.publishEvent(new PatientLinked(id, p.id(), system, emr.emrUuid(), write));
+        log.info("Linked TeleClinic patient {} to {} record {} ({}, score {})", p.id(), system, emr.emrUuid(), decidedBy, score);
         return links("id = ?", id).get(0);
     }
 
-    private UUID upsertCandidate(Patient p, EmrPatient emr, MatchScore s, String status) {
-        Optional<UUID> existing = jdbc.sql("SELECT id FROM matching.candidate WHERE emr_uuid = ? AND patient_id = ?")
-                .params(emr.emrUuid(), p.id()).query(UUID.class).optional();
+    private UUID upsertCandidate(String system, Patient p, EmrPatient emr, MatchScore s, String status) {
+        Optional<UUID> existing = jdbc.sql("SELECT id FROM matching.candidate WHERE system = ? AND emr_uuid = ? AND patient_id = ?")
+                .params(system, emr.emrUuid(), p.id()).query(UUID.class).optional();
         if (existing.isPresent()) {
             // A decided pair keeps its decision; an undecided one gets the latest evidence
             jdbc.sql("""
@@ -204,16 +204,16 @@ public class IdentityMatcher {
         }
         UUID id = UUID.randomUUID();
         jdbc.sql("""
-                        INSERT INTO matching.candidate (id, emr_uuid, patient_id, emr_record, score, band, agreeing, conflicting, status)
-                        VALUES (?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?)""")
-                .params(id, emr.emrUuid(), p.id(), toJson(emr), s.score(), s.band().name(),
+                        INSERT INTO matching.candidate (id, system, emr_uuid, patient_id, emr_record, score, band, agreeing, conflicting, status)
+                        VALUES (?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?)""")
+                .params(id, system, emr.emrUuid(), p.id(), toJson(emr), s.score(), s.band().name(),
                         s.agreeing().toArray(String[]::new), s.conflicting().toArray(String[]::new), status).update();
         return id;
     }
 
     private List<Candidate> candidates(String where, Object... params) {
         return jdbc.sql("SELECT c.* FROM matching.candidate c WHERE " + where).params(List.of(params))
-                .query((rs, n) -> new Candidate(rs.getObject("id", UUID.class), rs.getString("emr_uuid"),
+                .query((rs, n) -> new Candidate(rs.getObject("id", UUID.class), rs.getString("system"), rs.getString("emr_uuid"),
                         rs.getObject("patient_id", UUID.class), fromJson(rs.getString("emr_record"), EmrPatient.class),
                         rs.getDouble("score"), rs.getString("band"), strings(rs.getArray("agreeing")),
                         strings(rs.getArray("conflicting")), rs.getString("status"), rs.getString("decided_by"),
@@ -226,7 +226,8 @@ public class IdentityMatcher {
     }
 
     private Link link(ResultSet rs) throws SQLException {
-        return new Link(rs.getObject("id", UUID.class), rs.getObject("patient_id", UUID.class), rs.getString("emr_uuid"),
+        return new Link(rs.getObject("id", UUID.class), rs.getObject("patient_id", UUID.class), rs.getString("system"),
+                rs.getString("emr_uuid"),
                 rs.getDouble("score"), rs.getString("decided_by"), rs.getString("reason"),
                 rs.getTimestamp("decided_at").toInstant(),
                 fromJson(rs.getString("written_identifiers"), new TypeReference<Map<String, String>>() { }));

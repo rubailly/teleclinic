@@ -79,10 +79,17 @@ logging:
 teleclinic:
   sync:
     key: ${SYNC_KEY:not-set}
-    # The gateway's webhook triggers (OpenFn); empty means the gateway's one-minute schedule picks the work up
-    outbound-hook: ${SYNC_OUTBOUND_HOOK:}
-    inbound-hook: ${SYNC_INBOUND_HOOK:}
-    external-system: openmrs-demo-facility
+    # The EMRs, by the facility registry's emr_system. Hooks are the gateway's webhook triggers (OpenFn); empty means
+    # the gateway's one-minute schedule picks the work up
+    targets:
+      ebuzima:
+        name: eBuzima
+        outbound-hook: ${EBUZIMA_OUTBOUND_HOOK:}
+        inbound-hook: ${EBUZIMA_INBOUND_HOOK:}
+      openmrs-kibagabaga:
+        name: OpenMRS, Kibagabaga District Hospital
+        outbound-hook: ${OPENMRS_OUTBOUND_HOOK:}
+        inbound-hook: ${OPENMRS_INBOUND_HOOK:}
     max-attempts: 10
   audit:
     # kafka: entries go through the outbox to audit.events and one writer appends them to the chain (the stack).

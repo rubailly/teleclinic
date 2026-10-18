@@ -16,16 +16,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import rw.teleclinic.core.consent.ConsentService;
 import rw.teleclinic.core.matching.IdentityMatcher;
+import rw.teleclinic.core.patientindex.Facility;
 import rw.teleclinic.core.patientindex.Patient;
 import rw.teleclinic.core.patientindex.PatientDirectory;
 import rw.teleclinic.core.shared.ApiException;
 import rw.teleclinic.core.triage.TriageFinalised;
 
-/** Outbound writes to the facility EMR: queued with the state change, pulled by the gateway, retried, dead-lettered. */
+/**
+ * Outbound writes to the EMRs: queued with the state change, for the EMR of the patient's home facility, pulled by the
+ * gateway one EMR at a time, retried, dead-lettered.
+ */
 @Service
 class SyncQueue {
 
-    record Item(UUID id, String kind, UUID patientId, String reference, JsonNode payload, int attempts) {
+    record Item(UUID id, String target, String kind, UUID patientId, String reference, JsonNode payload, int attempts) {
     }
 
     private static final Logger log = LoggerFactory.getLogger(SyncQueue.class);
@@ -52,13 +56,21 @@ class SyncQueue {
         }
     }
 
-    /** The clinician's decision becomes an encounter in the EMR, if the patient's consent covers treatment. */
+    /**
+     * The clinician's decision becomes an encounter in the EMR of the patient's home facility (in its eBuzima tenant for a
+     * health centre), if the patient's consent covers treatment. Returns the target, or null when nothing was queued.
+     */
     @Transactional
-    boolean enqueueEncounter(TriageFinalised e) {
+    String enqueueEncounter(TriageFinalised e) {
         Patient p = patients.require(e.patientId());
         if (consents.activeCovering(p.id(), "TREAT").isEmpty()) {
-            ledger.event("OUTBOUND", "Encounter", e.consultationId().toString(), null, "NOT_RELEASED", "no consent covering TREAT");
-            return false;
+            ledger.event(null, "OUTBOUND", "Encounter", e.consultationId().toString(), null, "NOT_RELEASED", "no consent covering TREAT");
+            return null;
+        }
+        Facility home = patients.homeFacility(p.id()).orElse(null);
+        if (home == null) {
+            ledger.event(null, "OUTBOUND", "Encounter", e.consultationId().toString(), null, "NOT_ROUTED", "no home facility");
+            return null;
         }
         Map<String, Object> patient = new LinkedHashMap<>();
         patient.put("teleclinicId", p.id().toString());
@@ -77,72 +89,84 @@ class SyncQueue {
         encounter.put("decision", ("CONFIRM".equals(e.decision()) ? "Confirmed" : "Overridden") + " by " + e.reviewerName()
                 + (e.reason() == null || e.reason().isBlank() ? "" : ": " + e.reason()));
         encounter.put("channel", e.channel());
-        return insert("ENCOUNTER", p.id(), e.consultationId().toString(), Map.of("patient", patient, "encounter", encounter));
+        Map<String, Object> facility = new LinkedHashMap<>();
+        facility.put("code", home.code());
+        facility.put("name", home.name());
+        facility.put("tenant", home.emrTenant());
+        boolean queued = insert(home.emrSystem(), "ENCOUNTER", p.id(), e.consultationId().toString(),
+                Map.of("patient", patient, "encounter", encounter, "facility", facility));
+        return queued ? home.emrSystem() : null;
     }
 
     @Transactional
-    boolean enqueueIdentifiers(String kind, UUID linkId, UUID patientId, String emrUuid, Map<String, String> identifiers) {
-        return insert(kind, patientId, linkId.toString(), Map.of("emrPatientUuid", emrUuid, "identifiers", identifiers));
+    boolean enqueueIdentifiers(String kind, String target, UUID linkId, UUID patientId, String emrUuid, Map<String, String> identifiers) {
+        return insert(target, kind, patientId, linkId.toString(), Map.of("emrPatientUuid", emrUuid, "identifiers", identifiers));
     }
 
-    private boolean insert(String kind, UUID patientId, String reference, Map<String, Object> payload) {
+    private boolean insert(String target, String kind, UUID patientId, String reference, Map<String, Object> payload) {
+        props.target(target);
         int n = jdbc.sql("""
-                        INSERT INTO sync.outbound (id, kind, patient_id, reference, payload) VALUES (?, ?, ?, ?, ?::jsonb)
-                        ON CONFLICT (kind, reference) DO NOTHING""")
-                .params(UUID.randomUUID(), kind, patientId, reference, toJson(payload)).update();
+                        INSERT INTO sync.outbound (id, target, kind, patient_id, reference, payload) VALUES (?, ?, ?, ?, ?, ?::jsonb)
+                        ON CONFLICT (target, kind, reference) DO NOTHING""")
+                .params(UUID.randomUUID(), target, kind, patientId, reference, toJson(payload)).update();
         return n == 1;
     }
 
-    /** Oldest first, only what is due: an item waiting out its backoff is not handed out again yet. */
+    /** For one EMR, oldest first, only what is due: an item waiting out its backoff is not handed out again yet. */
     @Transactional(readOnly = true)
-    List<Item> due(int limit) {
+    List<Item> due(String target, int limit) {
+        props.target(target);
         return jdbc.sql("""
-                        SELECT * FROM sync.outbound WHERE status = 'PENDING' AND next_attempt_at <= now()
+                        SELECT * FROM sync.outbound WHERE target = ? AND status = 'PENDING' AND next_attempt_at <= now()
                         ORDER BY created_at LIMIT ?""")
-                .param(Math.min(Math.max(limit, 1), 100))
-                .query((rs, n) -> new Item(rs.getObject("id", UUID.class), rs.getString("kind"), rs.getObject("patient_id", UUID.class),
-                        rs.getString("reference"), readJson(rs.getString("payload")), rs.getInt("attempts"))).list();
+                .params(target, Math.min(Math.max(limit, 1), 100))
+                .query((rs, n) -> item(rs)).list();
+    }
+
+    private Item item(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new Item(rs.getObject("id", UUID.class), rs.getString("target"), rs.getString("kind"),
+                rs.getObject("patient_id", UUID.class), rs.getString("reference"), readJson(rs.getString("payload")), rs.getInt("attempts"));
     }
 
     /** The gateway wrote the item. The EMR record as it now reads becomes the ledger's version and hash. */
     @Transactional
     void done(UUID id, String outcome, JsonNode emrPatient, String emrEncounterUuid) {
         Item item = jdbc.sql("SELECT * FROM sync.outbound WHERE id = ? FOR UPDATE").param(id)
-                .query((rs, n) -> new Item(id, rs.getString("kind"), rs.getObject("patient_id", UUID.class), rs.getString("reference"),
-                        readJson(rs.getString("payload")), rs.getInt("attempts"))).optional()
+                .query((rs, n) -> item(rs)).optional()
                 .orElseThrow(() -> ApiException.notFound("No outbound item " + id));
         jdbc.sql("UPDATE sync.outbound SET status = 'DONE', done_at = now(), outcome = ?, last_error = NULL WHERE id = ?")
                 .params(outcome, id).update();
         String emrUuid = emrPatient == null ? null : emrPatient.path("id").asText();
         if ("REMOVE_IDENTIFIER".equals(item.kind())) {
-            ledger.forget("Patient", item.patientId().toString());
+            ledger.forget(item.target(), "Patient", item.patientId().toString());
         } else if (emrPatient != null) {
-            ledger.record("Patient", item.patientId().toString(), emrUuid, emrPatient.path("meta").path("lastUpdated").asText(null),
+            ledger.record(item.target(), "Patient", item.patientId().toString(), emrUuid, emrPatient.path("meta").path("lastUpdated").asText(null),
                     PatientContent.hash(emrPatient), "OUTBOUND");
         }
         if ("ADOPTED".equals(outcome)) {
             // Conditional create found the record by UPI or national ID: that is an automatic link
-            matcher.recordAdoption(item.patientId(), emrUuid, "conditional create: the EMR record already carried the same national identifier");
+            matcher.recordAdoption(item.patientId(), item.target(), emrUuid, "conditional create: the EMR record already carried the same national identifier");
         }
         if (emrEncounterUuid != null) {
-            ledger.record("Encounter", item.reference(), emrEncounterUuid, null, item.reference(), "OUTBOUND");
+            ledger.record(item.target(), "Encounter", item.reference(), emrEncounterUuid, null, item.reference(), "OUTBOUND");
         }
-        ledger.event("OUTBOUND", "ENCOUNTER".equals(item.kind()) ? "Encounter" : "Patient",
+        ledger.event(item.target(), "OUTBOUND", "ENCOUNTER".equals(item.kind()) ? "Encounter" : "Patient",
                 "ENCOUNTER".equals(item.kind()) ? item.reference() : item.patientId().toString(), emrUuid, outcome, item.kind());
         Metrics.counter("teleclinic.sync.outbound", "outcome", outcome).increment();
-        log.info("Sync {} {} -> {} ({})", item.kind(), item.reference(), emrUuid, outcome);
+        log.info("Sync {} {} -> {} {} ({})", item.kind(), item.reference(), item.target(), emrUuid, outcome);
     }
 
     /** Exponential backoff with jitter: 5 s, 10 s, 20 s ... capped at 5 minutes; dead letter after the limit. */
     @Transactional
     void failed(UUID id, String error) {
-        int attempts = jdbc.sql("UPDATE sync.outbound SET attempts = attempts + 1, last_error = ? WHERE id = ? RETURNING attempts")
+        Item item = jdbc.sql("UPDATE sync.outbound SET attempts = attempts + 1, last_error = ? WHERE id = ? RETURNING *")
                 .params(error == null ? "unknown" : error.length() > 500 ? error.substring(0, 500) : error, id)
-                .query(Integer.class).optional().orElseThrow(() -> ApiException.notFound("No outbound item " + id));
+                .query((rs, n) -> item(rs)).optional().orElseThrow(() -> ApiException.notFound("No outbound item " + id));
+        int attempts = item.attempts();
         if (attempts >= props.maxAttempts()) {
             jdbc.sql("UPDATE sync.outbound SET status = 'DEAD' WHERE id = ?").param(id).update();
             Metrics.counter("teleclinic.sync.outbound", "outcome", "DEAD").increment();
-            ledger.event("OUTBOUND", "Item", id.toString(), null, "DEAD", error);
+            ledger.event(item.target(), "OUTBOUND", "Item", id.toString(), null, "DEAD", error);
             return;
         }
         long base = Math.min(300, 5L << Math.min(attempts - 1, 10));
@@ -152,10 +176,12 @@ class SyncQueue {
         Metrics.counter("teleclinic.sync.outbound", "outcome", "FAILED").increment();
     }
 
-    /** Dead letters go back in the queue, in their original order. */
+    /** Dead letters for one EMR go back in the queue, in their original order. */
     @Transactional
-    int replay() {
-        return jdbc.sql("UPDATE sync.outbound SET status = 'PENDING', attempts = 0, next_attempt_at = now() WHERE status = 'DEAD'").update();
+    int replay(String target) {
+        props.target(target);
+        return jdbc.sql("UPDATE sync.outbound SET status = 'PENDING', attempts = 0, next_attempt_at = now() WHERE target = ? AND status = 'DEAD'")
+                .param(target).update();
     }
 
     private String toJson(Object v) {

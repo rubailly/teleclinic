@@ -2129,7 +2129,7 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "max(teleclinic_sync_outbound_pending)",
+     "expr": "max by (emr) (teleclinic_sync_outbound_pending)",
      "legendFormat": "",
      "refId": "A",
      "instant": true,
@@ -2197,7 +2197,7 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "max(teleclinic_sync_outbound_oldest_seconds)",
+     "expr": "max by (emr) (teleclinic_sync_outbound_oldest_seconds)",
      "legendFormat": "",
      "refId": "A",
      "instant": true,
@@ -2269,7 +2269,7 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "max(teleclinic_sync_outbound_dead)",
+     "expr": "max by (emr) (teleclinic_sync_outbound_dead)",
      "legendFormat": "",
      "refId": "A",
      "instant": true,

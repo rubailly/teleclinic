@@ -31,22 +31,23 @@ class SyncListeners {
 
     @ApplicationModuleListener
     void on(TriageFinalised e) {
-        if (queue.enqueueEncounter(e)) {
-            kick(props.outboundHook());
+        String target = queue.enqueueEncounter(e);
+        if (target != null) {
+            kick(props.target(target).outboundHook());
         }
     }
 
     @ApplicationModuleListener
     void on(PatientLinked e) {
-        if (queue.enqueueIdentifiers("ADD_IDENTIFIER", e.linkId(), e.patientId(), e.emrUuid(), e.identifiers())) {
-            kick(props.outboundHook());
+        if (queue.enqueueIdentifiers("ADD_IDENTIFIER", e.system(), e.linkId(), e.patientId(), e.emrUuid(), e.identifiers())) {
+            kick(props.target(e.system()).outboundHook());
         }
     }
 
     @ApplicationModuleListener
     void on(PatientUnlinked e) {
-        if (queue.enqueueIdentifiers("REMOVE_IDENTIFIER", e.linkId(), e.patientId(), e.emrUuid(), e.identifiers())) {
-            kick(props.outboundHook());
+        if (queue.enqueueIdentifiers("REMOVE_IDENTIFIER", e.system(), e.linkId(), e.patientId(), e.emrUuid(), e.identifiers())) {
+            kick(props.target(e.system()).outboundHook());
         }
     }
 

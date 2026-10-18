@@ -49,6 +49,15 @@ public class PatientDirectory {
         return jdbc.sql("SELECT * FROM patient_index.patient ORDER BY family_name, given_name").query(PATIENT).list();
     }
 
+    /** Where the patient is registered, and so which EMR holds their facility record. */
+    public Optional<Facility> homeFacility(UUID id) {
+        return jdbc.sql("""
+                        SELECT f.* FROM patient_index.patient p JOIN patient_index.facility f ON f.code = p.home_facility
+                        WHERE p.id = ?""")
+                .param(id).query((rs, n) -> new Facility(rs.getString("code"), rs.getString("name"), rs.getString("level"),
+                        rs.getString("district"), rs.getString("emr_system"), rs.getString("emr_tenant"))).optional();
+    }
+
     /** The number to reach a patient on: their own, or for a dependant without one, a verified guardian's. */
     public Optional<String> contactPhone(UUID id) {
         Optional<String> own = findById(id).map(Patient::phone);

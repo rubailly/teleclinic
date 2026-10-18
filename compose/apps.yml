@@ -29,8 +29,10 @@ x-core: &core
     USSD_GATEWAY_KEY: ${USSD_GATEWAY_KEY}
     # Sync gateway (compose/emr.yml): the key it presents, and its webhook triggers, called to start a run at once
     SYNC_KEY: ${SYNC_KEY:-not-set}
-    SYNC_OUTBOUND_HOOK: http://openfn:4000/i/614a751c-7c83-56bc-9747-1d574e225443
-    SYNC_INBOUND_HOOK: http://openfn:4000/i/96f76e15-65f7-55e3-84a6-ca5e32247472
+    OPENMRS_OUTBOUND_HOOK: http://openfn:4000/i/614a751c-7c83-56bc-9747-1d574e225443
+    OPENMRS_INBOUND_HOOK: http://openfn:4000/i/96f76e15-65f7-55e3-84a6-ca5e32247472
+    EBUZIMA_OUTBOUND_HOOK: http://openfn:4000/i/50f69c1f-df83-53c8-bdc2-9391826d02c6
+    EBUZIMA_INBOUND_HOOK: http://openfn:4000/i/ca422855-5b33-55a4-b2fc-7a9cc019b566
     SMS_URL: http://ussd-gateway:8300
     TRIAGE_SLA_SCALE: ${TRIAGE_SLA_SCALE}
     JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
