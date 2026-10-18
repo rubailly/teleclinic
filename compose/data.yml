@@ -179,7 +179,7 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        for t in consultation.paid consultation.expired triage.requested audit.events fhir.outbound; do
+        for t in consultation.paid consultation.expired triage.requested audit.events audit.db fhir.outbound ops.probe; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka-1:9092,kafka-2:9092,kafka-3:9092 --create --if-not-exists \
             --topic "$$t" --partitions 6 --replication-factor 3 --config min.insync.replicas=2
         done

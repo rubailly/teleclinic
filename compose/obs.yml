@@ -48,5 +48,24 @@ services:
     restart: unless-stopped
     networks: [teleclinic]
 
+  # Audit layer 3 shipping: pgAudit lines from the PostgreSQL containers to Kafka (read-only Docker socket)
+  log-shipper:
+    image: timberio/vector:0.42.0-alpine
+    command: ["--config", "/etc/vector/vector.yaml"]
+    volumes:
+      - ./config/vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8686/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 128m
+    restart: unless-stopped
+    networks: [teleclinic]
+
 volumes:
   promdata:

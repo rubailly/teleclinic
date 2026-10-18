@@ -20,10 +20,10 @@ note "$(isr_summary)"
 step "3. produce 50 messages with acks=all while one broker is down"
 marker="probe-$(date +%s)"
 seq 1 50 | sed "s/^/$marker-/" | docker exec -i "$(c kafka-$other)" /opt/kafka/bin/kafka-console-producer.sh \
-  --bootstrap-server "$bootstrap" --topic audit.events --producer-property acks=all >/dev/null 2>"/tmp/kp.$$"
+  --bootstrap-server "$bootstrap" --topic ops.probe --producer-property acks=all >/dev/null 2>"/tmp/kp.$$"
 errors=$(grep -ci "error\|exception" "/tmp/kp.$$"); rm -f "/tmp/kp.$$"
 got=$(docker exec "$(c kafka-$other)" /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server "$bootstrap" \
-  --topic audit.events --from-beginning --timeout-ms 8000 2>/dev/null | grep -c "$marker")
+  --topic ops.probe --from-beginning --timeout-ms 8000 2>/dev/null | grep -c "$marker")
 note "producer errors: $errors, messages read back: $got of 50"
 
 step "4. start kafka-$b again; it catches up"

@@ -39,6 +39,15 @@ bootstrap:
 
 postgresql:
   listen: 0.0.0.0:5432
+  # Audit layer 3 (design 4.6.4): pgAudit. Off by default; switched on per role in post-bootstrap.sh, fully for
+  # administrators. The log line prefix is what the audit writer parses after the shipper sends it to Kafka.
+  parameters:
+    shared_preload_libraries: pgaudit
+    pgaudit.log: none
+    pgaudit.log_relation: "on"
+    pgaudit.log_parameter: "off"
+    pgaudit.log_catalog: "off"
+    log_line_prefix: '%m [%p] user=%u db=%d app=%a client=%h '
   data_dir: /var/lib/postgresql/data/pgdata
   pgpass: /tmp/pgpass
   # Replicas clone with an immediate checkpoint; the default spread checkpoint delays a new replica by minutes

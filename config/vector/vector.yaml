@@ -1,0 +1,27 @@
+# Ships the pgAudit lines from the three PostgreSQL nodes to Kafka (audit.db), where the core's audit writer adds
+# them to the hash chain. In production the shipper tails the PostgreSQL log files on each database host.
+api:
+  enabled: true
+  address: 0.0.0.0:8686
+
+sources:
+  postgres:
+    type: docker_logs
+    include_containers: ["teleclinic-pg-"]
+
+transforms:
+  audit_lines:
+    type: filter
+    inputs: [postgres]
+    condition: 'contains(string!(.message), "AUDIT: ")'
+
+sinks:
+  kafka:
+    type: kafka
+    inputs: [audit_lines]
+    bootstrap_servers: kafka-1:9092,kafka-2:9092,kafka-3:9092
+    topic: audit.db
+    encoding:
+      codec: json
+# The Docker log source cannot acknowledge end to end, so a line in flight during a shipper restart can be lost.
+# Production tails the PostgreSQL log files with checkpoints instead.
