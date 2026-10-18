@@ -22,13 +22,19 @@ check "edge -> core: release"         curl -fsS --max-time 3 "$PUBLIC_BASE_URL/a
 check "edge: actuator not exposed"    bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 $PUBLIC_BASE_URL/actuator/health)\" = 404 ] && echo 404"
 check "IremboAccount stand-in (OIDC)" bash -c "curl -fsS --max-time 3 $KEYCLOAK_PUBLIC_URL/realms/$OIDC_REALM/.well-known/openid-configuration | grep -o '\"issuer\":\"[^\"]*\"'"
 check "Ops cockpit (scenario runner)"   curl -fsS --max-time 3 http://127.0.0.1:9500/health
-scrape() {  # every Prometheus target up, except core-green when no release is running
-  curl -fsS --max-time 3 http://127.0.0.1:9790/api/v1/targets | python3 -c "
-import json, sys
-ts = [t for t in json.load(sys.stdin)['data']['activeTargets'] if not (t['labels']['instance'] == 'core-green:8080' and t['health'] != 'up')]
+scrape() {  # every Prometheus target up, except a core colour that is stopped on purpose (no release, or rolled back)
+  local stopped=""
+  for colour in blue green; do
+    [ "$(docker inspect --format '{{.State.Running}}' "teleclinic-core-$colour-1" 2>/dev/null)" = true ] || stopped="$stopped core-$colour:8080"
+  done
+  curl -fsS --max-time 3 http://127.0.0.1:9790/api/v1/targets | STOPPED="$stopped" python3 -c "
+import json, os, sys
+stopped = os.environ['STOPPED'].split()
+ts = [t for t in json.load(sys.stdin)['data']['activeTargets'] if t['labels']['instance'] not in stopped]
 down = [t['labels']['instance'] for t in ts if t['health'] != 'up']
-assert not down, down
-print(len(ts), 'targets up')"; }
+if down:
+    sys.exit('down: ' + ', '.join(down))
+print(len(ts), 'targets up' + (' (stopped on purpose: ' + ' '.join(stopped) + ')' if stopped else ''))"; }
 check "Prometheus scraping"            scrape
 check "Grafana"                        bash -c "curl -fsS --max-time 3 http://localhost:9700/api/health | grep -o '\"database\": *\"ok\"'"
 check "USSD gateway"                  curl -fsS --max-time 3 http://localhost:9380/health
