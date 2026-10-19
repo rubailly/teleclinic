@@ -25,7 +25,38 @@ make emr-up && make reset
 
 `make reset` restarts the stack with every value in `.env`; run it again after any change there.
 
-## Addresses
+## With a domain: HTTPS on subdomains
+
+Point the domain and a wildcard at the server (DNS `A` records for `@` and `*`), then on the server:
+
+```bash
+python3 scripts/deploy/server-env.py --update --domain <domain>   # public settings only; passwords kept
+make reset && make emr-up && make proxy-up
+```
+
+Caddy (`compose/proxy.yml`, `config/caddy/Caddyfile`) listens on ports 80 and 443, gets a Let's Encrypt certificate
+for each name and forwards it to the matching service. The stack's ports then listen on 127.0.0.1 only
+(`PUBLISH_IP`), HAProxy keeps the proxy's forwarded scheme and client address (`TRUST_PROXY_HEADERS`), and the session
+cookie is Secure. Live at https://app.teleclinic-demo.dev:
+
+| What | URL |
+| --- | --- |
+| Patient web app; clinician, clerk and audit pages | `https://app.<domain>/app/`, `/clinician/`, `/clerk/`, `/audit/` |
+| Keycloak, the IremboAccount stand-in | `https://login.<domain>` |
+| IremboPay mock | `https://pay.<domain>/admin/deliveries` |
+| USSD phone simulator | `https://ussd.<domain>` |
+| eBuzima | `https://ebuzima.<domain>` |
+| OpenMRS O3 | `https://openmrs.<domain>` |
+| OpenFn Lightning | `https://openfn.<domain>` |
+| Grafana | `https://grafana.<domain>` |
+| Ops cockpit and runbooks (user `ops`) | `https://ops.<domain>` |
+| HAProxy stats; database proxy stats | `https://stats.<domain>/stats`; `https://stats.<domain>/db/stats` |
+
+The bare domain and `www.` redirect to `app.`; plain HTTP redirects to HTTPS. Let's Encrypt allows ten new accounts per
+address in three hours: Caddy asks for all twelve certificates at once on its first start, so one or two can wait a
+while and arrive on its own retries.
+
+## Addresses without a domain
 
 | What | URL |
 | --- | --- |

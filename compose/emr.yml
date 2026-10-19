@@ -289,7 +289,10 @@ services:
       WORKER_SECRET: ${OPENFN_WORKER_SECRET}
       WORKER_LOG_LEVEL: info
     depends_on:
-      openfn: {condition: service_healthy}
+      openfn:
+        condition: service_healthy
+        # A recreated Lightning (new settings) drops the worker's connection: restart it with Lightning
+        restart: true
     mem_limit: 768m
     # Reaches both EMRs on the EMR network and the core (through HAProxy) on the interop network
     networks: [emr, interop]

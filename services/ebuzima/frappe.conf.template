@@ -45,9 +45,10 @@ server {
 		proxy_set_header Connection "upgrade";
 		proxy_set_header X-Frappe-Site-Name ${FRAPPE_SITE_NAME_HEADER};
 		# Changed from frappe_docker's template. The socket server refuses a connection whose Host and Origin hostnames
-		# differ, then checks the session by calling the Origin URL. The browser reaches eBuzima as localhost, so both
-		# carry the site name, and the Origin names this front's own port (8080) so the call lands here.
-		proxy_set_header Origin $proxy_x_forwarded_proto://${FRAPPE_SITE_NAME_HEADER}:8080;
+		# differ, then checks the session by calling the Origin URL. The browser reaches eBuzima by another name
+		# (localhost, or a domain through a TLS proxy), so both carry the site name, and the Origin is this front's own
+		# plain-HTTP port (8080) so the call lands here, whatever scheme the browser used.
+		proxy_set_header Origin http://${FRAPPE_SITE_NAME_HEADER}:8080;
 		proxy_set_header Host ${FRAPPE_SITE_NAME_HEADER};
 
 		proxy_pass http://socketio-server;
