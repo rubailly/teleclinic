@@ -1,26 +1,26 @@
 # Diagrams
 
-The figures of the design document (`docs/TeleClinic_Technical_Design_Document.docx`, version 1.3). Each figure is
-here as an SVG (sharp at any zoom) and as a PNG at twice the drawing size (the one placed in the document).
+The 16 figures of the [design document](../docs/TeleClinic_Technical_Design_Document.docx). Each one is here as an SVG
+(sharp at any zoom) and as a PNG at twice the drawing size, which is the one placed in the document.
 
-| File | Figure in the document |
+| File | Figure |
 | --- | --- |
-| `d01_context` | 1. System context |
-| `d02_container` | 2. Container diagram |
-| `d03a_seq_login` | 3. Phase 1: authorization code flow with PKCE (login with IremboAccount) |
-| `d03b_seq_triage_pay` | 4. Phase 2: consent, synchronous rules triage and payment request |
-| `d03c_seq_confirm` | 5. Phase 3: webhook verification and payment confirmation |
-| `d03d_seq_ussd` | 6. USSD variant |
-| `d04_saga` | 7. Consultation saga states |
-| `d05_sync` | 8. Sync gateway data flow (eBuzima and OpenMRS) |
-| `d06_identity` | 9. Identity resolution |
-| `d07_ha` | 10. High-availability topology |
-| `d08_split` | 11. Behaviour during a 2 to 1 network partition |
-| `d09_deploy` | 12. Blue/green release |
-| `d10_audit` | 13. Audit pipeline |
-| `d11_ai` | 14. AI triage pipeline |
-| `d12_hitl` | 15. Triage state machine |
-| `d13_ops` | 16. Observability and alerting |
+| [`d01_context`](d01_context.svg) | 1. System context |
+| [`d02_container`](d02_container.svg) | 2. Container diagram |
+| [`d03a_seq_login`](d03a_seq_login.svg) | 3. Phase 1: authorization code flow with PKCE (login with IremboAccount) |
+| [`d03b_seq_triage_pay`](d03b_seq_triage_pay.svg) | 4. Phase 2: consent, synchronous rules triage and payment request |
+| [`d03c_seq_confirm`](d03c_seq_confirm.svg) | 5. Phase 3: webhook verification and payment confirmation |
+| [`d03d_seq_ussd`](d03d_seq_ussd.svg) | 6. USSD variant |
+| [`d04_saga`](d04_saga.svg) | 7. Consultation saga states |
+| [`d05_sync`](d05_sync.svg) | 8. Sync gateway data flow (eBuzima and OpenMRS) |
+| [`d06_identity`](d06_identity.svg) | 9. Identity resolution |
+| [`d07_ha`](d07_ha.svg) | 10. High-availability topology |
+| [`d08_split`](d08_split.svg) | 11. Behaviour during a 2 to 1 network partition |
+| [`d09_deploy`](d09_deploy.svg) | 12. Blue/green release |
+| [`d10_audit`](d10_audit.svg) | 13. Audit pipeline |
+| [`d11_ai`](d11_ai.svg) | 14. AI triage pipeline |
+| [`d12_hitl`](d12_hitl.svg) | 15. Triage state machine |
+| [`d13_ops`](d13_ops.svg) | 16. Observability and alerting |
 
 ## Sources
 

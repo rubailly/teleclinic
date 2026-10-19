@@ -1,93 +1,51 @@
-# Running the stack on a shared server
+# Running the stack on a server
 
-The same Docker Compose stack as on the demo machine, on one Linux server reached by its address. Measured on a
-6 vCPU, 11 GB VPS (Ubuntu 24.04, Docker 29) with 8 GB of swap: first `make up-lite` 4.5 min, first `make emr-up`
-17 min (it builds the eBuzima image), `make reset` 2 min; every scene and the 74 core tests pass.
+The live demo at https://app.teleclinic-demo.dev is this repository on one Linux server: 6 vCPU, 11 GB of memory
+plus 8 GB of swap, Ubuntu 24.04, Docker 29. There the first `make up-lite` takes about 5 minutes, the first
+`make emr-up` about 17 (it builds the eBuzima image), and `make reset` about 2. Every scene passes there.
 
 ## Install (once, as root)
 
 ```bash
-# 1. Docker, make, Python with YAML, and swap as a safety net for builds
+# Docker, make, Python with YAML, and swap as a safety net for builds
 curl -fsSL https://get.docker.com | sh
 apt-get install -y make python3-yaml python3-psycopg2 jq
 fallocate -l 8G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
 echo "/swapfile none swap sw 0 0" >> /etc/fstab
 
-# 2. The code (a clone, or a git bundle copied from a machine that has it)
 git clone <repository> /opt/teleclinic && cd /opt/teleclinic
 
-# 3. .env for this server: public URLs at its address, every password and secret random
-python3 scripts/deploy/server-env.py <server address>
+# .env for this server: public URLs and a random value for every password and secret
+python3 scripts/deploy/server-env.py --domain <domain>
 
-# 4. The EMRs first, so the core starts with the sync key they generate, then the stack
-make emr-up && make reset
+# The EMRs first, so the core starts with the sync key they create; then the stack and the HTTPS proxy
+make emr-up && make reset && make proxy-up
 ```
 
-`make reset` restarts the stack with every value in `.env`; run it again after any change there.
+Point the domain and a wildcard at the server first (DNS `A` records for `@` and `*`). Caddy
+(`compose/proxy.yml`, `config/caddy/Caddyfile`) listens on ports 80 and 443, gets a Let's Encrypt certificate for each
+subdomain and forwards it to its service; the subdomains are listed in [`URLS.md`](URLS.md). The bare domain
+redirects to `app.`. The stack's own ports then listen on 127.0.0.1 only, so only 22, 80 and 443 are open.
 
-## With a domain: HTTPS on subdomains
+Without a domain, `python3 scripts/deploy/server-env.py <server address>` sets everything up for plain HTTP on the
+server's address and the local ports in [`URLS.md`](URLS.md); skip `make proxy-up`. That is fine for synthetic data,
+but not for anything longer-lived.
 
-Point the domain and a wildcard at the server (DNS `A` records for `@` and `*`), then on the server:
+`make reset` restarts the stack with the values in `.env`; run it after any change there.
+`python3 scripts/deploy/server-env.py --update --domain <domain>` changes the public settings and keeps the passwords.
 
-```bash
-python3 scripts/deploy/server-env.py --update --domain <domain>   # public settings only; passwords kept
-make reset && make emr-up && make proxy-up
-```
+## Passwords
 
-Caddy (`compose/proxy.yml`, `config/caddy/Caddyfile`) listens on ports 80 and 443, gets a Let's Encrypt certificate
-for each name and forwards it to the matching service. The stack's ports then listen on 127.0.0.1 only
-(`PUBLISH_IP`), HAProxy keeps the proxy's forwarded scheme and client address (`TRUST_PROXY_HEADERS`), and the session
-cookie is Secure. Live at https://app.teleclinic-demo.dev:
-
-| What | URL |
-| --- | --- |
-| Patient web app; clinician, clerk and audit pages | `https://app.<domain>/app/`, `/clinician/`, `/clerk/`, `/audit/` |
-| Keycloak, the IremboAccount stand-in | `https://login.<domain>` |
-| IremboPay mock | `https://pay.<domain>/admin/deliveries` |
-| USSD phone simulator | `https://ussd.<domain>` |
-| eBuzima | `https://ebuzima.<domain>` |
-| OpenMRS O3 | `https://openmrs.<domain>` |
-| OpenFn Lightning | `https://openfn.<domain>` |
-| Grafana | `https://grafana.<domain>` |
-| Ops cockpit and runbooks (user `ops`) | `https://ops.<domain>` |
-| HAProxy stats; database proxy stats | `https://stats.<domain>/stats`; `https://stats.<domain>/db/stats` |
-
-The bare domain and `www.` redirect to `app.`; plain HTTP redirects to HTTPS. Let's Encrypt allows ten new accounts per
-address in three hours: Caddy asks for all twelve certificates at once on its first start, so one or two can wait a
-while and arrive on its own retries.
-
-## Addresses without a domain
-
-| What | URL |
-| --- | --- |
-| Patient web app (patient1, patient2) | `http://<server>:9080/app/` |
-| Clinician queue (clinician1), clerk (clerk1), audit explorer (admin1) | `http://<server>:9080/clinician/`, `/clerk/`, `/audit/` |
-| USSD phone simulator | `http://<server>:9380` |
-| IremboPay mock (checkout, webhook log) | `http://<server>:9280/admin/deliveries` |
-| Keycloak, the IremboAccount stand-in | `http://<server>:9180` |
-| eBuzima (Administrator; nurse.kimironko@ebuzima.local) | `http://<server>:9580` |
-| OpenMRS O3, Kibagabaga District Hospital (admin) | `http://<server>:9880/openmrs/spa` |
-| OpenFn Lightning (admin@teleclinic.local) | `http://<server>:9480` |
-| Grafana (read-only without login) | `http://<server>:9700` |
-| Ops cockpit and runbooks (user `ops`) | `http://<server>:9500` |
-| HAProxy and database proxy stats | `http://<server>:9404/stats`, `http://<server>:9405/stats` |
-
-Passwords are in `/opt/teleclinic/.env` on the server, never in the repository: `DEMO_USER_PASSWORD` (all five demo
+They exist only in `/opt/teleclinic/.env` on the server, never in the repository: `DEMO_USER_PASSWORD` (the five demo
 users), `COCKPIT_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `EBUZIMA_ADMIN_PASSWORD`,
-`EBUZIMA_NURSE_PASSWORD`, `OPENMRS_ADMIN_PASSWORD`, `OPENFN_ADMIN_PASSWORD`. Read one with
+`EBUZIMA_NURSE_PASSWORD`, `OPENMRS_ADMIN_PASSWORD` and `OPENFN_ADMIN_PASSWORD`. Read one with
 `grep ^DEMO_USER_PASSWORD= /opt/teleclinic/.env`.
 
-## What is and is not public
+The ops cockpit can run failure scenarios and holds the Docker socket, so on a server it always asks for a password.
 
-Public: the ports above. The ops cockpit can run the failure scenarios and holds the Docker socket, so on a server it
-asks for a password (`COCKPIT_BIND=0.0.0.0` with `COCKPIT_PASSWORD`). PostgreSQL, Kafka, Valkey, Prometheus
-(`127.0.0.1:9790`), the database proxy (`127.0.0.1:9432`) and HAProxy's runtime API (`127.0.0.1:9999`) stay on the
-server. Scenes and `make doctor` run on the server itself.
+## Known behaviour
 
-Plain HTTP on the server's address, as on the demo machine: fine for a demo with synthetic data. A longer-lived
-deployment puts TLS in front (a domain with Caddy, or a Cloudflare Tunnel), sets `SESSION_COOKIE_SECURE=true` and
-replaces SSH password login with keys.
-
-OpenMRS opens on Patient lists for every role (config/openmrs/frontend): its usual home page, Service queues, fails
-in the distribution without demo data, which sets up no queues. `make capacity` is for a larger machine: its
-generators run on the same server as the stack.
+- Let's Encrypt allows ten new accounts per address in three hours. On its first start Caddy asks for all the
+  certificates at once, so one or two may arrive a little later on its own retries.
+- `make capacity` runs its load generators on the same machine as the stack; use a larger server for it, and run
+  `make reset` afterwards.

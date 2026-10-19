@@ -41,7 +41,7 @@ public class RulesEngine {
     record RuleSet(String version, List<String> symptoms, @JsonProperty("default") Fallback fallback, List<Rule> rules) {
     }
 
-    // Target: p95 under 100 ms (decisions.md). Registered globally; Spring Boot adds its Prometheus registry to it.
+    // Target: p95 under 100 ms (design document, Section 1). Registered globally; Spring Boot adds its Prometheus registry to it.
     private static final Timer TIMER = Timer.builder("teleclinic.triage.rules")
             .description("Time to evaluate the triage rules for one intake").publishPercentileHistogram()
             .register(Metrics.globalRegistry);
