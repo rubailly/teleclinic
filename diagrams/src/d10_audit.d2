@@ -1,0 +1,45 @@
+...@style
+# Two rows: collection runs left to right, then storage and reporting run back below it
+grid-rows: 2
+vertical-gap: 90
+
+collect: "" {
+  style: {opacity: 0}
+  direction: right
+  sources: "Where reads and writes happen" {
+    class: zone
+    style: {stroke: "#C0392B"}
+    grid-columns: 2
+    horizontal-gap: 20
+    vertical-gap: 20
+    gw: "API gateway\naccess log" {class: edge}
+    core: "Core audit interceptor\nwho, what, which patient,\npurpose of use, consent basis" {class: edge}
+    pg: "PostgreSQL pgAudit\nSELECT, INSERT, UPDATE, DELETE\n(catches DBA and direct access),\nshipped from the logs" {class: edge}
+    emr: "EMR audit\neBuzima document versions,\nOpenMRS audit; AuditEvent\nfrom the sync gateway" {class: edge}
+    bg: "Break-glass access\n(reason required)" {class: edge}
+  }
+  kafka: "Kafka topic audit.events\n(replicated, ordered)" {class: data}
+  alerts: "Alertmanager\nbreak-glass, bulk export,\nafter-hours access,\nfailed chain check" {class: warn}
+  writer: "Audit writer\nsequence number +\nSHA-256 hash chain" {class: core}
+
+  sources -> kafka: events
+  kafka -> alerts {style.stroke-dash: 4}
+  kafka -> writer
+}
+
+keep: "" {
+  style: {opacity: 0}
+  direction: left
+  store: "Tamper-evident storage" {
+    class: datazone
+    grid-columns: 3
+    horizontal-gap: 30
+    db: "Append-only audit database\n(no UPDATE or DELETE rights)" {class: data}
+    worm: "MinIO write-once archive\ndaily signed checkpoint" {class: data}
+    search: "OpenSearch\nsearch by patient, user, time" {class: data}
+  }
+  reports: "Reports\nregulator access reports;\nthe patient's 'who accessed\nmy record'; monthly chain check" {class: good}
+  store -> reports: "verify,\nsearch"
+}
+
+collect.writer -> keep.store: "append in order"

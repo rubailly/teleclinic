@@ -1,0 +1,55 @@
+...@style
+# Three rows read as a snake: right, back left, then right again
+grid-rows: 3
+vertical-gap: 110
+
+classes: {
+  fail: {style: {stroke: "#C0392B"; font-color: "#922B21"}}
+}
+
+book: Booking and triage {
+  class: zone
+  direction: right
+  start: "" {shape: circle; width: 24; height: 24; style: {fill: "#2D3748"; stroke: "#2D3748"}}
+  draft: DRAFT {class: core}
+  triaged: TRIAGED {class: core}
+  pending: "PENDING_PAYMENT\ntimer 10 min" {class: core}
+  expired: "EXPIRED\nslot released" {class: edge}
+
+  start -> draft
+  draft -> triaged: rules result
+  triaged -> pending: "create payment\n(Idempotency-Key)"
+  pending -> expired: "timeout\nor cancel" {class: fail}
+}
+
+payq: Payment and queue {
+  class: zone
+  direction: left
+  paid: PAID {class: core}
+  queued: QUEUED {class: core}
+  refundp: REFUND_PENDING {class: edge}
+  refunded: REFUNDED {class: edge}
+
+  paid -> queued: outbox event
+  queued -> refundp: "no clinician in the SLA,\nor the patient cancels" {class: fail}
+  refundp -> refunded: "refund\nconfirmed" {class: fail}
+}
+
+care: Consultation and record sync {
+  class: zone
+  direction: right
+  incons: IN_CONSULTATION {class: core}
+  completed: COMPLETED {class: core}
+  syncp: SYNC_PENDING {class: core}
+  synced: SYNCED {class: good}
+  syncf: "SYNC_FAILED\nretry, then dead letter" {class: edge}
+
+  incons -> completed: "consultation\nclosed"
+  completed -> syncp: "encounter queued for\nthe home facility's EMR"
+  syncp -> synced: "EMR\nacknowledged"
+  syncp -> syncf: error {class: fail}
+  syncf -> syncp: "retry with\nbackoff" {style.stroke-dash: 4}
+}
+
+book.pending -> payq.paid: "signed webhook +\nserver-side status check"
+payq.queued -> care.incons: clinician accepts

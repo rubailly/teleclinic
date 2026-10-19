@@ -1,0 +1,33 @@
+...@style
+direction: down
+
+patient: "Patient answers\nweb form or USSD menu" {class: person}
+orch: "Triage orchestrator (TeleClinic core)" {class: core}
+
+sync: "SYNC PATH (in session, under 100 ms)\ndeterministic red-flag rules\nfrom the clinical protocol" {class: good}
+advice: "Immediate advice in the same session,\nfor example: go to the nearest facility" {class: good}
+
+event: "ASYNC PATH: event triage.requested\nminimised structured features" {class: data}
+
+zone: "AI trust zone: no internet egress, mTLS only" {
+  class: aizone
+  anon: "Anonymization gateway\nfield allowlist, Presidio recognizers\n(national ID, phone, names); free text\nredacted, identifiers tokenised" {class: ai}
+  vault: "Pseudonym vault\nre-identification only in the core,\nafter inference" {class: ai}
+  model: "Model server (ONNX, versioned)\nmasked features in; urgency,\nconfidence, contributing factors out" {class: ai}
+  anon -> vault {style.stroke-dash: 4}
+  anon -> model
+}
+
+merge: "Safety merge\nfinal = max(rules, model):\nthe model can only escalate" {class: edge}
+review: "Clinician queue and review\nlabelled AI_PROPOSED until the clinician\nCONFIRMS or OVERRIDES it (with a reason)" {class: good}
+mlops: "MLOps\nfeedback labels, drift monitor, registry, kill switch;\nnew model versions run in shadow first" {class: ai}
+
+patient -> orch
+orch -> sync
+orch -> event
+sync -> advice
+sync -> merge: rules urgency {style.stroke-dash: 4}
+event -> zone.anon
+zone.model -> merge: model urgency
+merge -> review
+review -> mlops: "agree or disagree"

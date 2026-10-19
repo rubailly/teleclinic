@@ -1,0 +1,38 @@
+...@style
+direction: down
+
+work: "Workloads and probes" {
+  class: zone
+  grid-columns: 4
+  horizontal-gap: 30
+  hosts: "Hosts\nnode exporter, SMART,\nUPS, network links" {class: ext}
+  data: "PostgreSQL, Kafka,\netcd, HAProxy" {class: data}
+  apps: "Core, gateway, USSD,\ntriage, OpenFn" {class: core}
+  probes: "Synthetic probes\nUSSD dial test, login,\nsandbox payment,\nFHIR round trip" {class: core}
+}
+
+otel: "OpenTelemetry Collector\nmetrics, logs, traces" {class: good}
+
+stack: Observability stack {
+  class: datazone
+  grid-columns: 3
+  horizontal-gap: 30
+  tempo: "Tempo\ntraces" {class: good}
+  loki: "Loki\nlogs" {class: good}
+  prom: "Prometheus\nmetrics, SLO rules" {class: good}
+}
+
+sec: "Wazuh + Falco\nsecurity events" {class: edge}
+backup: "Backup monitor\npgBackRest restore tests" {class: core}
+
+grafana: "Grafana\nSLO and business dashboards" {class: good}
+alert: "Alertmanager\npage, ticket and info tiers" {class: edge}
+oncall: "On-call\nSMS, voice, chat;\na runbook link in every alert" {class: person}
+
+work -> otel
+otel -> stack
+stack -> grafana
+stack.prom -> alert
+sec -> alert
+backup -> alert
+alert -> oncall

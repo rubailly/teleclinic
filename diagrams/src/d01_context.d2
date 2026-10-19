@@ -1,0 +1,38 @@
+...@style
+direction: down
+
+patient: Patient\nweb, mobile, USSD, voice {class: person}
+clinician: Clinician or nurse {class: person}
+auditor: Regulator or auditor {class: person}
+
+teleclinic: TeleClinic\nnational telemedicine platform\non-premise in Rwanda {
+  class: core
+  style: {stroke-width: 3; font-size: 19; bold: true}
+  width: 420
+  height: 120
+}
+
+patient -> teleclinic: book, triage,\nconsult, pay
+clinician -> teleclinic: review queue,\nconsultation
+auditor -> teleclinic: access and audit reports
+
+irembo: IremboHub shared services {
+  class: extzone
+  account: IremboAccount\nidentity (OIDC) {class: irembo}
+  pay: IremboPay\npayments, reimbursements,\ninsurance check {class: irembo}
+}
+emr: Facility EMRs {
+  class: zone
+  ebuzima: eBuzima\nhealth centres: one central\ninstance, a tenant per centre {class: ext}
+  openmrs: OpenMRS\none installation per district,\nreferral or teaching hospital {class: ext}
+}
+national: National systems\nclient registry, shared health\nrecord (OpenHIM), DHIS2 {class: ext}
+telecom: Telecom aggregators\nUSSD, SMS, voice {class: ext}
+
+teleclinic -> irembo.account: OIDC sign-in
+teleclinic <-> irembo.pay: "payment intents,\nsigned webhooks back"
+teleclinic <-> emr.ebuzima: sync: Frappe REST\nand webhooks
+teleclinic <-> emr.openmrs: sync: FHIR R4
+teleclinic -> national: FHIR, reports
+teleclinic <-> telecom: USSD and SMS
+

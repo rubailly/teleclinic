@@ -1,0 +1,22 @@
+...@style
+shape: sequence_diagram
+user: "User\n(browser or app)" {class: person}
+bff: "TeleClinic\ngateway + core (BFF)" {class: core}
+ia: "IremboAccount\n(OIDC provider)" {class: irembo}
+idx: "Patient index\n(matching)" {class: core}
+audit: Audit log {class: edge}
+
+user -> bff: "1. GET /consult (no session cookie)"
+bff -> user: "2. 302 to /authorize: client_id, scope, state, nonce, PKCE code_challenge" {style.stroke-dash: 4}
+user -> ia: "3. Sign in with national credentials + one-time code (MFA)"
+ia -> user: "4. 302 to redirect_uri?code=...&state=..." {style.stroke-dash: 4}
+user -> bff: "5. GET /callback?code=...&state=..."
+bff -> ia: "6. POST /token: code + code_verifier + client authentication"
+ia -> bff: "7. id_token, access_token, refresh_token" {style.stroke-dash: 4}
+bff -> bff: "8. Validate id_token: signature (JWKS), issuer, audience, nonce, expiry; check state"
+bff -> idx: "9. Resolve or create the patient from subject, national ID, name, birth date"
+idx -> bff: "10. patientId + match status: linked, review or new" {style.stroke-dash: 4}
+bff -> audit: "11. LOGIN audit event (user, patient, channel, IP)"
+bff -> user: "12. Set-Cookie session (HttpOnly, Secure, SameSite); redirect to consent" {style.stroke-dash: 4}
+
+(* -> *)[*].style.italic: false

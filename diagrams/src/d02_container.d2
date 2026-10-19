@@ -1,0 +1,93 @@
+...@style
+direction: down
+
+channels: Channels {
+  class: zone
+  grid-columns: 5
+  grid-gap: 24
+  web: "Patient web app\n(PWA, low bandwidth)" {class: core}
+  mobile: "Mobile app\n(same APIs)" {class: core}
+  ussd: "USSD and voice gateway\n(stateless, sessions in Valkey)" {class: core}
+  clin: "Clinician workspace\n(OpenMRS O3 + queue panel)" {class: core}
+  video: "Video and voice rooms\n(Jitsi + TURN)" {class: core}
+}
+
+edge: Edge and security {
+  class: edgezone
+  grid-columns: 4
+  grid-gap: 24
+  haproxy: "HAProxy pair + Keepalived\nTLS, WAF, blue/green weights" {class: edge}
+  apisix: "API gateway (APISIX)\nOIDC/JWT, quotas, correlation id" {class: edge}
+  opa: "Policy engine (OPA)\nconsent, role, purpose of use" {class: edge}
+  kms: "Secrets and keys\n(OpenBao)" {class: edge}
+}
+
+core: "TeleClinic core: modular monolith, 2+ active instances (blue/green)" {
+  class: corezone
+  grid-columns: 4
+  grid-gap: 20
+  identity: "Identity link\n+ consent" {class: core}
+  index: "Patient index\n+ facility registry" {class: core}
+  consult: "Consultation\n+ scheduling" {class: core}
+  triage: "Triage orchestrator\n(rules in process)" {class: core}
+  pay: "Payments\n(saga)" {class: core}
+  fhir: "FHIR facade\n+ profile validator" {class: core}
+  sync: "EMR sync queue\nper EMR, ledger" {class: core}
+  match: "Identity matching\n+ review queue" {class: core}
+  audit: "Audit interceptor\n+ hash chain" {class: core}
+  notify: "Notifications\n(SMS)" {class: core}
+  outbox: "Transactional\noutbox" {class: core}
+  bff: "Session (BFF)\nno tokens in the browser" {class: core}
+}
+
+ai: "AI trust zone (no internet egress)" {
+  class: aizone
+  grid-columns: 3
+  grid-gap: 20
+  anon: "Anonymization gateway\nPresidio + allowlist" {class: ai}
+  model: "Model server\nONNX Runtime" {class: ai}
+  vault: "Pseudonym\nvault" {class: ai}
+}
+
+data: "Data tier: three nodes in separate fault domains" {
+  class: datazone
+  grid-columns: 5
+  grid-gap: 20
+  pg: "PostgreSQL\nPatroni + 3 etcd" {class: data}
+  kafka: "Kafka KRaft\n3 brokers" {class: data}
+  valkey: "Valkey\nsessions, locks" {class: data}
+  minio: "MinIO, object lock\naudit archive, backups" {class: data}
+  search: "OpenSearch\naudit search" {class: data}
+}
+
+ops: Operations and security monitoring {
+  class: zone
+  grid-columns: 4
+  grid-gap: 20
+  otel: "OpenTelemetry\nCollector" {class: good}
+  obs: "Prometheus, Loki,\nTempo, Grafana" {class: good}
+  sec: "Wazuh + Falco" {class: edge}
+  backup: "pgBackRest" {class: core}
+}
+
+ext: External systems and integration {
+  class: extzone
+  grid-columns: 2
+  grid-gap: 20
+  account: "IremboAccount\nOIDC sign-in" {class: irembo}
+  irembopay: "IremboPay\npayments, webhooks,\ninsurance check" {class: irembo}
+  openfn: "OpenFn Lightning: sync gateway\nworkflows per EMR" {class: core}
+  telecom: "Telecom aggregators\nUSSD, SMS, voice" {class: ext}
+  ebuzima: "eBuzima (Frappe REST)\nhealth centres, as tenants" {class: ext}
+  openmrs: "Hospital OpenMRS (FHIR R4)\none per hospital" {class: ext}
+  national: "OpenHIM: client registry,\nshared health record" {class: ext}
+  dhis: "DHIS2\naggregate reporting" {class: ext}
+}
+
+channels -> edge: HTTPS
+edge -> core: verified requests
+core -> ai: masked features only
+core -> data: "SQL, events, cache, audit"
+core -> ops: "metrics, logs, traces" {style.stroke-dash: 4}
+ext <-> channels: "USSD, SMS, voice"
+core <-> ext: "OIDC sign-in, payments and webhooks,\nEMR sync (OpenFn pulls the queue), FHIR to OpenHIM"

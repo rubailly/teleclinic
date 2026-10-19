@@ -1,0 +1,31 @@
+...@style
+direction: right
+
+vip: "Clients connect to a\nvirtual IP (Keepalived, VRRP)" {class: edge}
+a: "HAProxy A (active)" {class: edge}
+b: "HAProxy B (standby,\nsame configuration)" {class: edge}
+
+pipeline: "Release pipeline\n1. deploy green; 2. smoke tests and health\n3. shift 1, 10, 50, 100 percent;\n4. watch the SLOs; 5. drain blue\nAutomatic rollback: if an SLO gate fails,\nthe weights return to blue at once" {class: good}
+
+blue: "BLUE pool: v1.4 (live)" {
+  class: corezone
+  style.stroke-dash: 4
+  b1: core-blue-1 {class: core}
+  b2: core-blue-2 {class: core}
+}
+green: "GREEN pool: v1.5 (candidate)" {
+  class: zone
+  style: {stroke: "#1E8449"; font-color: "#1E8449"}
+  g1: core-green-1 {class: good}
+  g2: core-green-2 {class: good}
+}
+
+data: "PostgreSQL + Kafka\nexpand and contract migrations,\nbackward-compatible schemas" {class: data}
+
+vip -> a
+a <-> b: VRRP {style.stroke-dash: 4}
+pipeline -> a: "runtime API:\nset weight, drain,\nroll back" {style.stroke-dash: 4}
+a -> blue: "weight 100 to 0"
+a -> green: "weight 0 to 100" {style: {stroke: "#1E8449"; stroke-width: 3}}
+blue -> data
+green -> data

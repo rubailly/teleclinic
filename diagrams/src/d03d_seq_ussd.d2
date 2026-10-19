@@ -1,0 +1,23 @@
+...@style
+shape: sequence_diagram
+phone: "Phone\n(USSD)" {class: person}
+agg: "Telecom\naggregator" {class: ext}
+gw: "USSD gateway\n+ session store" {class: core}
+core: TeleClinic core {class: core}
+pay: "IremboPay /\nmobile money" {class: irembo}
+
+phone -> agg: "1. Dial the service code"
+agg -> gw: "2. POST callback: sessionId, msisdn, input text"
+gw -> core: "3. Resolve msisdn to a linked identity, check the PIN, short-lived limited token"
+core -> gw: "4. Token + who this person can book for (self, dependants)" {style.stroke-dash: 4}
+gw -> agg: "5. CON menu, one page (at most 182 characters)" {style.stroke-dash: 4}
+agg -> phone: "6. 'Who is this for?', consent, symptoms: one step at a time; state in the session store" {style.stroke-dash: 4}
+gw -> core: "7. Rules evaluation in the same step (under 100 ms): advice shown at once"
+gw -> core: "8. Book: consultation + payment with mobile-money push (Idempotency-Key)"
+core -> pay: "9. Create payment for the patient's share"
+gw -> agg: "10. END 'Approve the payment on your phone'" {style.stroke-dash: 4}
+pay -> phone: "11. Mobile-money approval prompt (out of band)" {style.stroke-dash: 4}
+pay -> core: "12. Webhook payment.succeeded, verified as in part 3"
+core -> phone: "13. SMS: booking confirmed, a nurse will contact you" {style.stroke-dash: 4}
+
+(* -> *)[*].style.italic: false

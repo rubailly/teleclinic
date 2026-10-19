@@ -1,0 +1,31 @@
+...@style
+direction: down
+
+account: "IremboAccount identity\nsubject, national ID, name, date of birth, phone" {class: irembo}
+emrrec: "EMR candidate records\neBuzima and hospital OpenMRS, matched per EMR" {class: ext}
+
+match: "1. Blocking: national ID exact; phone; date of birth + phonetic name\n2. Scoring: Fellegi-Sunter weights for Kinyarwanda name variants,\ntransposed dates and phone changes" {class: core}
+band: "Score band?" {class: decision; width: 200; height: 90}
+
+auto: "AUTO-LINK\nhigh score and 2 strong\nidentifiers; reversible" {class: good}
+review: "REVIEW QUEUE\nside-by-side evidence; the clerk\nlinks, rejects or asks for data" {class: warn}
+new: "NEW PATIENT\nno link created" {class: core}
+blocked: "BLOCKED\ndifferent national IDs:\nnever offered" {class: edge}
+
+surv: "3. Survivorship per field\nlegal identity from IremboAccount and the national ID;\nclinical history stays in the source EMR" {class: core}
+wb: "Write-back to that EMR\nTeleClinic ID and missing national IDs,\nthrough the sync gateway" {class: core}
+log: "Decision log\nwho, why, evidence; AuditEvent; sync ledger.\nUnlink or correct at any time: links are never\ndestructive and the write-back is taken back" {class: data}
+
+account -> match
+emrrec -> match
+match -> band
+band -> auto: high
+band -> review: medium
+band -> new: low
+band -> blocked: conflict
+auto -> surv
+review -> surv: approved
+surv -> wb
+surv -> log
+new -> log
+blocked -> log

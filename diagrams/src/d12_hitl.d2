@@ -1,0 +1,22 @@
+...@style
+direction: down
+
+start: "" {shape: circle; width: 24; height: 24; style: {fill: "#2D3748"; stroke: "#2D3748"}}
+rules: "RULES_ONLY\nmodel unavailable or off" {class: good}
+proposed: "AI_PROPOSED\nbadge in the queue;\nno clinical action allowed" {class: ai}
+timeout: "UNREVIEWED_TIMEOUT\nescalate to a supervisor;\nthe rules urgency stays" {class: edge}
+review: "UNDER_REVIEW\nthe clinician opened the case" {class: core}
+confirmed: "CONFIRMED\nclinician signature" {class: good}
+overridden: "OVERRIDDEN\nreason mandatory" {class: good}
+final: "FINAL\norders, referral and\nprescription unlocked" {class: good; style.stroke-width: 3}
+
+start -> rules: no model result
+start -> proposed: model result
+rules -> review: open
+proposed -> review: open
+proposed -> timeout: SLA expired {style: {stroke: "#C0392B"; font-color: "#922B21"}}
+timeout -> review: "supervisor\nopens it" {style.stroke-dash: 4}
+review -> confirmed
+review -> overridden
+confirmed -> final
+overridden -> final

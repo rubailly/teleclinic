@@ -1,0 +1,54 @@
+...@style
+# Three columns: the core, the OpenFn sync gateway and the EMRs.
+# Writes leave the core from the queue at the top; changes come back into the inbound processor below.
+grid-columns: 3
+horizontal-gap: 160
+
+core: TeleClinic core {
+  class: corezone
+  grid-rows: 3
+  grid-columns: 3
+  horizontal-gap: 150
+  vertical-gap: 70
+  change: "Clinical change\nor identity link" {class: core}
+  route: "Route by home facility\n(level, EMR, tenant)" {class: core}
+  queue: "Outbound queue per EMR\nsame transaction as the change;\nordered, backoff, dead letter, replay" {class: data}
+  gap: "" {style: {opacity: 0}}
+  conflict: "Conflict\nreview queue" {class: warn}
+  ledger: "Sync ledger per EMR\nid map, version,\ncontent hash, origin" {class: data}
+  gap2: "" {style: {opacity: 0}}
+  model: "Canonical\nrelational model" {class: data}
+  inbound: "Inbound processor\necho drop by hash, authority\nrules, identity matching" {class: core}
+
+  change -> route
+  route -> queue
+  queue -> ledger: "on success: ids + hash" {style.stroke-dash: 4}
+  inbound -> ledger: "compare: an echo\nof our own write?" {style.stroke-dash: 4}
+  inbound -> model: "apply if\nallowed"
+  inbound -> conflict: conflict
+}
+
+gw: "OpenFn sync gateway: a workflow pair per EMR" {
+  class: zone
+  grid-columns: 1
+  vertical-gap: 40
+  w1: "W1  TeleClinic to eBuzima\nconditional create; encounter\nin the health centre's company" {class: core}
+  w2: "W2  eBuzima to TeleClinic\nchanges since cursor,\nDocTypes mapped to FHIR" {class: core}
+  w3: "W3  TeleClinic to OpenMRS\nconditional create,\nIf-Match update" {class: core}
+  w4: "W4  OpenMRS to TeleClinic\npoll _lastUpdated\nsince cursor" {class: core}
+}
+
+emr: Facility EMRs {
+  class: zone
+  grid-columns: 1
+  vertical-gap: 140
+  ebuzima: "eBuzima (health centres)\none central instance,\na company per centre;\nFrappe REST + webhooks" {class: ext}
+  openmrs: "OpenMRS (hospitals)\none per hospital;\nFHIR R4 API" {class: ext}
+}
+
+core.queue -> gw: "pull due writes\n(W1, W3)"
+gw -> core.inbound: "FHIR Patient, Encounter\n(W2, W4)"
+gw.w1 -> emr.ebuzima: write
+emr.ebuzima -> gw.w2: "webhook, then\nread changes" {style.stroke-dash: 4}
+gw.w3 -> emr.openmrs: "write with\norigin tag"
+emr.openmrs -> gw.w4: changes {style.stroke-dash: 4}

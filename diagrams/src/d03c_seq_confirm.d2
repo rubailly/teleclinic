@@ -1,0 +1,20 @@
+...@style
+shape: sequence_diagram
+pay: IremboPay {class: irembo}
+core: "TeleClinic core\n(saga)" {class: core}
+kafka: "Kafka\n(outbox relay)" {class: data}
+model: "Triage service\n(async model)" {class: ai}
+clin: "Clinician\nworkspace" {class: core}
+
+pay -> core: "1. POST webhook payment.succeeded (HMAC signature, event id)"
+core -> core: "2. Verify signature and timestamp; drop duplicate event ids"
+core -> pay: "3. GET /payments/{id}: server-side confirmation"
+pay -> core: "4. status SUCCEEDED, amount matches" {style.stroke-dash: 4}
+core -> core: "5. One transaction: PENDING_PAYMENT to PAID + outbox event"
+core -> kafka: "6. Relay publishes consultation.paid (key = patient id)"
+kafka -> model: "7. Async inference request: anonymised features only"
+model -> core: "8. Suggestion AI_PROPOSED (never final), merged with the rules floor" {style.stroke-dash: 4}
+core -> clin: "9. Case enters the queue ordered by urgency, flagged AI_PROPOSED"
+clin -> core: "10. Clinician accepts; consultation starts (video or voice); audit event written"
+
+(* -> *)[*].style.italic: false

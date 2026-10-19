@@ -1,0 +1,20 @@
+...@style
+shape: sequence_diagram
+user: User {class: person}
+core: "TeleClinic core\n(consultation + saga)" {class: core}
+rules: "Triage rules\n(module in the core)" {class: ai}
+db: "Database\n+ outbox" {class: data}
+pay: "IremboPay\n(+ insurance check)" {class: irembo}
+
+user -> core: "1. Give consent; submit symptoms and answers"
+core -> rules: "2. Evaluate the rules in process (synchronous)"
+rules -> core: "3. Urgency + red flags, under 100 ms" {style.stroke-dash: 4}
+core -> user: "4. Red flag: emergency advice now. Otherwise continue" {style.stroke-dash: 4}
+core -> db: "5. One transaction: consultation PENDING_PAYMENT (10 min timer) + outbox event"
+core -> pay: "6. Coverage check: insured? the patient's share (co-payment)"
+core -> pay: "7. POST /payments: patient's share, reference, callback URL, Idempotency-Key"
+pay -> core: "8. 201 paymentId + checkoutUrl (web) or mobile-money push (USSD)" {style.stroke-dash: 4}
+core -> user: "9. Redirect to checkout, or 'approve on your phone'" {style.stroke-dash: 4}
+user -> pay: "10. Pay with mobile money or card"
+
+(* -> *)[*].style.italic: false

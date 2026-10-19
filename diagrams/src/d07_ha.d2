@@ -1,0 +1,53 @@
+...@style
+# Rows: clients and the database entry point, then the three nodes side by side (the third fault domain
+# can be a small witness site when the data center has only two)
+grid-columns: 1
+vertical-gap: 80
+
+entry: "" {
+  style: {opacity: 0}
+  grid-columns: 2
+  horizontal-gap: 80
+  apps: "Core instances,\nUSSD gateway, OpenFn" {class: person}
+  vip: "HAProxy + Keepalived (2 hosts, VRRP virtual IP)\n:5000 writes to the Patroni primary, :5001 reads to replicas;\nPgBouncer pooling" {class: edge}
+  apps -> vip: SQL
+}
+
+nodes: "" {
+  style: {opacity: 0}
+  grid-columns: 3
+  horizontal-gap: 150
+
+  n1: "Node 1: fault domain A" {
+    class: zone
+    grid-columns: 1
+    vertical-gap: 60
+    pg: "PostgreSQL + Patroni\nLEADER" {class: data}
+    etcd: "etcd member (Raft)" {class: core}
+    kafka: "Kafka broker +\nKRaft controller" {class: data}
+  }
+  n2: "Node 2: fault domain B" {
+    class: zone
+    grid-columns: 1
+    vertical-gap: 60
+    pg: "PostgreSQL + Patroni\nsynchronous replica" {class: data}
+    etcd: "etcd member (Raft)" {class: core}
+    kafka: "Kafka broker +\nKRaft controller" {class: data}
+  }
+  n3: "Node 3: fault domain C, or a witness site" {
+    class: zone
+    grid-columns: 1
+    vertical-gap: 60
+    pg: "PostgreSQL + Patroni\nasynchronous replica" {class: data}
+    etcd: "etcd member (Raft)" {class: core}
+    kafka: "Kafka broker +\nKRaft controller" {class: data}
+  }
+  n1.pg -> n2.pg: "synchronous\n(ANY 1)" {style: {stroke: "#1E8449"; stroke-width: 3}}
+  n2.pg -> n3.pg: async {style.stroke-dash: 4}
+  n1.etcd <-> n2.etcd: "quorum\n2 of 3"
+  n2.etcd <-> n3.etcd
+  n1.kafka <-> n2.kafka: "RF 3,\nmin ISR 2"
+  n2.kafka <-> n3.kafka
+}
+
+entry.vip -> nodes.n1: "writes to the leader;\nreads to replicas"

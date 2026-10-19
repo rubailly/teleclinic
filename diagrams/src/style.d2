@@ -1,0 +1,71 @@
+# Shared look for every TeleClinic diagram: imported by each file with ...@style
+vars: {
+  d2-config: {
+    layout-engine: elk
+    pad: 24
+    # Default stroke (connections) in a neutral slate instead of the theme's blue
+    theme-overrides: {
+      B1: "#4A5568"
+      B2: "#4A5568"
+    }
+  }
+}
+
+classes: {
+  person: {
+    style: {fill: "#FFFFFF"; stroke: "#2D3748"; stroke-width: 2; border-radius: 18; font-color: "#1A202C"; font-size: 15; bold: true}
+  }
+  core: {
+    style: {fill: "#E8F1FB"; stroke: "#0B5CC0"; stroke-width: 2; border-radius: 8; font-color: "#1A202C"; font-size: 15; bold: true}
+  }
+  irembo: {
+    style: {fill: "#FFF4E0"; stroke: "#C77700"; stroke-width: 2; border-radius: 8; font-color: "#1A202C"; font-size: 15; bold: true}
+  }
+  ext: {
+    style: {fill: "#F1F1F1"; stroke: "#666666"; stroke-width: 2; border-radius: 8; font-color: "#1A202C"; font-size: 15; bold: true}
+  }
+  data: {
+    shape: cylinder
+    style: {fill: "#E9F7EF"; stroke: "#1E8449"; stroke-width: 2; font-color: "#1A202C"; font-size: 15; bold: true}
+  }
+  good: {
+    style: {fill: "#E9F7EF"; stroke: "#1E8449"; stroke-width: 2; border-radius: 8; font-color: "#1A202C"; font-size: 15; bold: true}
+  }
+  edge: {
+    style: {fill: "#FDEDEC"; stroke: "#C0392B"; stroke-width: 2; border-radius: 8; font-color: "#1A202C"; font-size: 15; bold: true}
+  }
+  ai: {
+    style: {fill: "#F3E8FD"; stroke: "#7B2FBE"; stroke-width: 2; border-radius: 8; font-color: "#1A202C"; font-size: 15; bold: true}
+  }
+  warn: {
+    style: {fill: "#FEF9E7"; stroke: "#B7950B"; stroke-width: 2; border-radius: 8; font-color: "#1A202C"; font-size: 15; bold: true}
+  }
+  decision: {
+    shape: diamond
+    style: {fill: "#FEF9E7"; stroke: "#B7950B"; stroke-width: 2; font-color: "#1A202C"; font-size: 15; bold: true}
+  }
+  zone: {
+    label.near: top-left
+    style: {fill: "#F7F9FC"; stroke: "#9AA5B1"; stroke-width: 2; stroke-dash: 4; border-radius: 12; font-color: "#2D3748"; font-size: 17; bold: true}
+  }
+  corezone: {
+    label.near: top-left
+    style: {fill: "#F4F8FD"; stroke: "#0B5CC0"; stroke-width: 2; border-radius: 12; font-color: "#0B5CC0"; font-size: 17; bold: true}
+  }
+  aizone: {
+    label.near: top-left
+    style: {fill: "#FAF5FE"; stroke: "#7B2FBE"; stroke-width: 2; stroke-dash: 4; border-radius: 12; font-color: "#5B2391"; font-size: 17; bold: true}
+  }
+  datazone: {
+    label.near: top-left
+    style: {fill: "#F4FBF7"; stroke: "#1E8449"; stroke-width: 2; stroke-dash: 4; border-radius: 12; font-color: "#1E6B3B"; font-size: 17; bold: true}
+  }
+  edgezone: {
+    label.near: top-left
+    style: {fill: "#FEF8F7"; stroke: "#C0392B"; stroke-width: 2; stroke-dash: 4; border-radius: 12; font-color: "#9B2C21"; font-size: 17; bold: true}
+  }
+  extzone: {
+    label.near: top-left
+    style: {fill: "#FFFCF6"; stroke: "#C77700"; stroke-width: 2; stroke-dash: 4; border-radius: 12; font-color: "#8A5300"; font-size: 17; bold: true}
+  }
+}
