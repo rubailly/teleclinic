@@ -57,9 +57,12 @@ x-kafka: &kafka
     KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     KAFKA_HEAP_OPTS: -Xms256m -Xmx256m
   healthcheck:
-    test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+    # The broker accepts connections. Not the Kafka CLI: each run starts a JVM (about 3 CPU-seconds), which on three
+    # brokers every few seconds took two of a 6 vCPU server's cores. In-sync replicas are checked where they matter:
+    # make doctor, the cockpit and the broker scene.
+    test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9092"]
     interval: 5s
-    timeout: 10s
+    timeout: 5s
     retries: 40
     start_period: 15s
   mem_limit: 640m
