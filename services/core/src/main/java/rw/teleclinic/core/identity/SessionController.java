@@ -3,11 +3,14 @@ package rw.teleclinic.core.identity;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.view.RedirectView;
 
@@ -15,8 +18,19 @@ import org.springframework.web.servlet.view.RedirectView;
 @RestController
 class SessionController {
 
+    static final String NEXT = "tc.next";
+    /** Where sign-in may send the browser back to: our own apps only, so "next" cannot be used to redirect away */
+    private static final Pattern APP_PAGE = Pattern.compile("/(app|clinician|clerk|audit)(/[A-Za-z0-9._/-]*)?");
+
+    static boolean isAppPage(String path) {
+        return path != null && APP_PAGE.matcher(path).matches();
+    }
+
     @GetMapping("/login")
-    RedirectView login() {
+    RedirectView login(@RequestParam(required = false) String next, HttpSession session) {
+        if (isAppPage(next)) {
+            session.setAttribute(NEXT, next);
+        }
         return new RedirectView("/oauth2/authorization/" + SecurityConfig.REGISTRATION_ID);
     }
 

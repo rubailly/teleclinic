@@ -46,7 +46,7 @@
 
   function signIn() {
     safeSet("tc.after", location.hash || "#/start");
-    location.href = "/login";
+    location.href = "/login?next=/app/";
   }
 
   function toast(msg) {

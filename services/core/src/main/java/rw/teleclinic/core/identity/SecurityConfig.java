@@ -22,7 +22,12 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequest
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
@@ -92,8 +97,10 @@ class SecurityConfig {
                 .requestMatchers("/sync/inbound").permitAll()
                 .requestMatchers("/triage/v1/models/kill-switch", "/triage/v1/models/activate").hasRole("admin")
                 .anyRequest().authenticated())
+            .requestCache(cache -> cache.requestCache(pageRequestsOnly()))
             .oauth2Login(login -> login
                 .loginPage("/login")
+                .successHandler(backToTheApp())
                 .authorizationEndpoint(endpoint -> endpoint.authorizationRequestResolver(authorizationRequests))
                 .userInfoEndpoint(userInfo -> userInfo.userAuthoritiesMapper(rolesFromIdToken())))
             .logout(logout -> logout.logoutSuccessHandler(logoutSuccess))
@@ -106,6 +113,35 @@ class SecurityConfig {
             .exceptionHandling(e -> e.defaultAuthenticationEntryPointFor(
                     new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), new AntPathRequestMatcher("/api/**")));
         return http.build();
+    }
+
+    /**
+     * Only a page the user opened is worth returning to after sign-in. Without this, an app's background call
+     * (for example GET /api/me answering 401) was remembered and the browser landed on raw JSON after login.
+     */
+    private static HttpSessionRequestCache pageRequestsOnly() {
+        RequestMatcher page = request -> "GET".equals(request.getMethod())
+                && SessionController.isAppPage(request.getRequestURI())
+                && String.valueOf(request.getHeader("Accept")).contains("text/html");
+        HttpSessionRequestCache cache = new HttpSessionRequestCache();
+        cache.setRequestMatcher(page);
+        return cache;
+    }
+
+    /** After sign-in: the app the user started from (GET /login?next=...), else the page they opened, else home. */
+    private static AuthenticationSuccessHandler backToTheApp() {
+        SavedRequestAwareAuthenticationSuccessHandler saved = new SavedRequestAwareAuthenticationSuccessHandler();
+        saved.setDefaultTargetUrl("/");
+        return (request, response, authentication) -> {
+            HttpSession session = request.getSession(false);
+            Object next = session == null ? null : session.getAttribute(SessionController.NEXT);
+            if (next instanceof String target) {
+                session.removeAttribute(SessionController.NEXT);
+                response.sendRedirect(target);
+                return;
+            }
+            saved.onAuthenticationSuccess(request, response, authentication);
+        };
     }
 
     /** Loads the token on every request so the XSRF-TOKEN cookie is always present for the apps. */

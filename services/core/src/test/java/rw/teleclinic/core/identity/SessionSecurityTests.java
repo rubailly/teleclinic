@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -30,6 +31,25 @@ class SessionSecurityTests extends IntegrationTest {
     @Test
     void browserPageWithoutSessionGoesToLogin() throws Exception {
         mvc.perform(get("/clinician/index.html").accept("text/html")).andExpect(status().is3xxRedirection()).andExpect(redirectedUrlPattern("**/login"));
+    }
+
+    @Test
+    void anApiCallIsNeverTheLandingPageAfterSignIn() throws Exception {
+        // A 401 on /api/me must not be remembered, or the browser lands on raw JSON after login
+        mvc.perform(get("/api/me").accept("*/*"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(request().sessionAttributeDoesNotExist("SPRING_SECURITY_SAVED_REQUEST"));
+    }
+
+    @Test
+    void signInRemembersOnlyOurOwnAppsAsTheWayBack() throws Exception {
+        mvc.perform(get("/login").param("next", "/clinician/"))
+                .andExpect(header().string("Location", "/oauth2/authorization/iremboaccount"))
+                .andExpect(request().sessionAttribute(SessionController.NEXT, "/clinician/"));
+        mvc.perform(get("/login").param("next", "https://evil.example/"))
+                .andExpect(request().sessionAttributeDoesNotExist(SessionController.NEXT));
+        mvc.perform(get("/login").param("next", "//evil.example/app/"))
+                .andExpect(request().sessionAttributeDoesNotExist(SessionController.NEXT));
     }
 
     @Test

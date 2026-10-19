@@ -9,7 +9,7 @@ let source = "", entries = [], selected = null, status = null, searches = false;
 
 async function api(path) {
   const res = await fetch(path, { credentials: "same-origin", headers: { "X-XSRF-TOKEN": decodeURIComponent(xsrf()) } });
-  if (res.status === 401) { location.href = "/login"; throw new Error("signed out"); }
+  if (res.status === 401) { location.href = "/login?next=/audit/"; throw new Error("signed out"); }
   return { ok: res.ok, status: res.status, data: res.ok ? await res.json() : null };
 }
 

@@ -20,7 +20,7 @@ async function api(method, path, body) {
     headers: { "Content-Type": "application/json", "X-XSRF-TOKEN": xsrf(), "X-Purpose-Of-Use": "TREAT" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (res.status === 401) { location.href = "/login"; throw new Error("signed out"); }
+  if (res.status === 401) { location.href = "/login?next=/clinician/"; throw new Error("signed out"); }
   const data = (res.headers.get("content-type") || "").includes("json") ? await res.json() : null;
   return { ok: res.ok, status: res.status, data };
 }
