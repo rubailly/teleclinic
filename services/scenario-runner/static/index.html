@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/static/cockpit.css">
 </head>
 <body>
-<div class="notice"><b>Demo operations console.</b> The buttons run real failure scenarios against this local stack; nothing here is simulated.</div>
+<div class="notice"><b>Demo operations console.</b> The buttons run real failure scenarios against this stack; nothing here is simulated. Failure scenarios put things back when they finish.</div>
 <header class="top">
   <div class="bar">
     <div class="mark"><b>Tele</b>Clinic <span class="pill">OPS</span></div>
@@ -56,13 +56,18 @@
   </div>
 
   <div class="col">
-    <section class="card">
-      <div class="card-head"><h2>Scenarios</h2><span class="muted small">one at a time</span></div>
-      <div class="scenarios" id="scenarios"></div>
+    <section class="card run-card" id="run-card">
+      <div class="card-head"><h2 id="run-title">Scenario run</h2><span id="run-status"></span></div>
+      <div id="run-body"><p class="run-idle">Pick a scenario below and press <b>Run</b>. Its steps appear here as they happen,
+        while the probes and nodes on the left show the effect.</p></div>
+      <details class="log" id="log" hidden>
+        <summary>Full log</summary>
+        <div class="console" id="console"></div>
+      </details>
     </section>
-    <section class="card console-card">
-      <div class="card-head"><h2 id="run-title">Run output</h2><span id="run-status"></span></div>
-      <div class="console" id="console"><span class="dim">Choose a scenario. Its script output appears here, step by step.</span></div>
+    <section class="card">
+      <div class="card-head"><h2>Scenarios</h2><span class="muted small">one at a time · click a name for details</span></div>
+      <div class="scenarios" id="scenarios"></div>
     </section>
     <section class="card">
       <div class="card-head"><h2>Events</h2><span class="muted small">changes the cockpit noticed</span></div>

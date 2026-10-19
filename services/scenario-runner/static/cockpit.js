@@ -7,7 +7,7 @@ const secs = (ms) => (ms / 1000).toFixed(1) + " s";
 const clock = (ms) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 const rwf = (n) => Number(n || 0).toLocaleString("en-US");
-let scenarios = [], run = { id: null, from: 0 }, last = null;
+let scenarios = [], run = { id: null, from: 0, lines: [] }, last = null;
 
 // ---------------------------------------------------------------- probes
 
@@ -156,27 +156,66 @@ function events(s) {
 
 // ---------------------------------------------------------------- scenarios and runs
 
+const expanded = new Set();  // scenarios whose description is expanded
 let rendered = null;
 function renderScenarios(busy) {
-  const key = `${scenarios.length}:${busy}:${last?.run?.scenario}`;
+  const active = busy ? last?.run?.scenario : null;
+  const key = `${scenarios.length}:${busy}:${active}:${[...expanded].join()}`;
   if (key === rendered) return;  // rebuild only on change, so a click is never lost
   rendered = key;
-  $("scenarios").innerHTML = scenarios.map((s) => `
-    <div class="scn ${last?.run?.scenario === s.id && busy ? "active" : ""}">
-      <div><div class="tags"><span class="badge b-muted">Scene ${esc(s.scene)}</span>${s.kind === "failure" ? '<span class="badge b-bad">failure</span>' : s.kind === "security" ? '<span class="badge b-violet">security</span>' : s.kind === "release" ? '<span class="badge b-ok">release</span>' : s.kind === "sync" ? '<span class="badge b-brand">sync</span>' : ""}</div><b>${esc(s.title)}</b></div>
-      <button class="run ${s.kind === "failure" ? "failure" : ""}" data-run="${s.id}" ${busy ? "disabled" : ""}>Run</button>
-      <p>${esc(s.detail)}</p>
-    </div>`).join("");
+  const groups = [...new Set(scenarios.map((s) => s.group))];
+  $("scenarios").innerHTML = groups.map((g) => `<div class="group"><h3>${esc(g)}</h3>${scenarios.filter((s) => s.group === g).map((s) => `
+    <div class="scn ${active === s.id ? "active" : ""} ${expanded.has(s.id) ? "open" : ""}">
+      <button class="scn-name" data-open="${s.id}" aria-expanded="${expanded.has(s.id)}"><span class="caret">›</span>${esc(s.title)}</button>
+      <button class="run ${s.kind === "failure" ? "failure" : ""}" data-run="${s.id}" ${busy ? "disabled" : ""}>${active === s.id ? "Running" : "Run"}</button>
+      ${expanded.has(s.id) ? `<p>${esc(s.detail)} <span class="muted">About ${about(s.typical)}.</span></p>` : ""}
+    </div>`).join("")}</div>`).join("");
   document.querySelectorAll("[data-run]").forEach((b) => b.onclick = () => start(b.dataset.run));
+  document.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => {
+    expanded.has(b.dataset.open) ? expanded.delete(b.dataset.open) : expanded.add(b.dataset.open);
+    renderScenarios(last?.run?.status === "running");
+  });
 }
+
+const about = (s) => s < 60 ? `${s} s` : `${Math.round(s / 60)} min`;
 
 async function start(id) {
   const r = await fetch(`/api/run/${id}`, { method: "POST" });
   const d = await r.json();
   if (!r.ok) { alert(d.error); return; }
-  run = { id: d.id, from: 0 };
+  run = { id: d.id, from: 0, lines: [] };
   $("console").innerHTML = "";
+  $("log").open = false;
+  if (window.innerWidth <= 1000) $("run-card").scrollIntoView({ behavior: "smooth", block: "start" });
   poll();
+}
+
+// Planned steps of the scenario, matched to the script's numbered step lines as they arrive
+function progress(sc, lines, status) {
+  const planned = sc?.steps || [];
+  let idx = -1;
+  const outByStep = {};
+  let result = null;
+  for (const l of lines) {
+    if (l.kind === "step") {
+      const n = /^>\s*(\d+)\./.exec(l.text);
+      idx = n ? Number(n[1]) - 1 : idx + 1;
+      idx = Math.min(idx, Math.max(planned.length - 1, 0));
+    } else if (l.kind === "pass" || l.kind === "fail") {
+      result = { kind: l.kind, text: l.text.replace(/^(PASS|FAIL):\s*/, "") };
+    } else if (l.text.trim() && idx >= 0) {
+      outByStep[idx] = l.text.trim();
+    }
+  }
+  const steps = planned.map((label, i) => {
+    let st = "todo";
+    if (status === "passed") st = "done";
+    else if (i < idx) st = "done";
+    else if (i === idx || (idx < 0 && i === 0)) st = status === "failed" ? "failed" : "now";
+    return { label, st, out: outByStep[i] };
+  });
+  const done = steps.filter((x) => x.st === "done").length;
+  return { steps, pct: status === "passed" ? 100 : Math.round((done / Math.max(steps.length, 1)) * 100), result };
 }
 
 async function followRun() {
@@ -189,12 +228,25 @@ async function followRun() {
     const t = `<time>${((l.at - d.started) / 1000).toFixed(1)}s</time>`;
     box.insertAdjacentHTML("beforeend", `<span class="${l.kind}">${t}${esc(l.text)}</span>\n`);
   }
+  run.lines = (run.lines || []).concat(d.lines);
   run.from += d.lines.length;
   if (stick) box.scrollTop = box.scrollHeight;
-  $("run-title").textContent = d.title;
+
+  const sc = scenarios.find((s) => s.id === d.scenario);
   const el = (d.ended || Date.now()) - d.started;
+  const { steps, pct, result } = progress(sc, run.lines, d.status);
+  $("run-title").textContent = d.title;
   $("run-status").innerHTML = d.status === "running" ? `<span class="badge b-brand">RUNNING ${mmss(el)}</span>`
     : d.status === "passed" ? `<span class="badge b-ok">PASSED in ${secs(el)}</span>` : `<span class="badge b-bad">FAILED after ${secs(el)}</span>`;
+  $("run-card").className = `card run-card ${d.status}`;
+  const icon = { done: "✓", now: "", failed: "✕", todo: "" };
+  $("run-body").innerHTML = `
+    <div class="meter"><i style="width:${pct}%"></i></div>
+    <div class="meter-note">${d.status === "running" ? `${mmss(el)} elapsed${sc ? ` · usually about ${about(sc.typical)}` : ""}` : `finished at ${clock(d.ended)}`}</div>
+    <ol class="steps">${steps.map((x) => `<li class="${x.st}"><span class="tick">${icon[x.st]}</span><div><b>${esc(x.label)}</b>
+      ${x.out && (x.st === "now" || x.st === "failed") ? `<small>${esc(x.out.slice(0, 160))}</small>` : ""}</div></li>`).join("")}</ol>
+    ${result ? `<div class="result ${result.kind}"><b>${result.kind === "pass" ? "Passed" : "Failed"}</b>${esc(result.text)}</div>` : ""}`;
+  $("log").hidden = false;
 }
 
 // ---------------------------------------------------------------- loop
@@ -217,8 +269,8 @@ async function poll() {
       : mix.map(([v, n]) => `${v} ${Math.round((n / served.length) * 100)}%`).join(" · ");
     const busy = s.run?.status === "running";
     renderScenarios(busy);
-    if (s.run && !run.id) run = { id: s.run.id, from: 0 };  // page opened while a run is going
-    if (s.run && s.run.id !== run.id && busy) { run = { id: s.run.id, from: 0 }; $("console").innerHTML = ""; }
+    if (s.run && !run.id) run = { id: s.run.id, from: 0, lines: [] };  // page opened while a run is going
+    if (s.run && s.run.id !== run.id && busy) { run = { id: s.run.id, from: 0, lines: [] }; $("console").innerHTML = ""; }
     await followRun();
   } catch (e) {
     $("db-note").className = "probe-note bad";

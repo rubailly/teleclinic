@@ -85,6 +85,49 @@ SCENARIOS = [
      "cmd": ["scripts/smoke/ussd.sh"], "kind": "traffic"},
 ]
 BY_ID = {s["id"]: s for s in SCENARIOS}
+# What the cockpit shows while a scenario runs: its planned steps (matched to the script's numbered steps as they
+# arrive), the group it is listed under, and roughly how long it takes on the demo server
+PLAN = {
+    "kill-db-leader": (40, ["Cluster before the failure", "Writes through pgproxy every 200 ms", "Kill the leader",
+                            "Wait for a new leader and the first successful write", "Every acknowledged write is still there",
+                            "The old leader rejoins as a replica"]),
+    "kill-kafka-broker": (70, ["In-sync replicas before", "Stop one broker", "Write 50 messages with acks=all",
+                               "Start the broker again; it catches up"]),
+    "partition-node": (75, ["Cluster before; isolate the leader's node", "Cut the node off the network",
+                            "The isolated node stops writing; the majority elects a leader",
+                            "A write sent to the isolated node is refused", "The majority keeps accepting writes",
+                            "Heal the network", "Every node has the same rows"]),
+    "duplicate-webhooks": (5, ["Find the last settled payment", "Send the same webhook twice more",
+                               "Send one signed with the wrong secret", "The core's records did not change"]),
+    "audit-access": (10, ["A read without a purpose of use is refused", "A read without consent is refused",
+                          "Eric consents; the clinician reads his record", "Eric sees who read his record",
+                          "A DBA reads the patient table in psql", "The audit chain is intact"]),
+    "tamper-audit": (55, ["A break-glass read (an alert fires)", "A DBA rewrites that audit entry", "Verify the chain",
+                          "pgAudit shows who did it", "Put the original entry back"]),
+    "sync-no-loop": (20, ["Keza's encounter is in eBuzima once", "Our own write comes back and is dropped",
+                          "A Kimironko nurse changes Keza's phone", "The change arrives once in TeleClinic",
+                          "Nothing bounces back"]),
+    "identity-review": (20, ["Read and score the facility's records", "The review queue shows the evidence",
+                             "Different national IDs: never offered", "Two strong identifiers: linked automatically",
+                             "The clerk links; the national ID goes to OpenMRS", "The clerk unlinks; the ID is taken back",
+                             "The audit trail shows both decisions"]),
+    "emr-offline": (120, ["OpenMRS goes offline", "Two consultations are decided while it is down",
+                          "OpenMRS is back; the backlog drains", "Each consultation is one encounter in OpenMRS"]),
+    "model-off": (3, ["Switch the model off"]),
+    "model-on": (3, ["Switch the model back on"]),
+    "release": (150, ["Start v1.5 beside the live colour", "Steady load through the public edge",
+                      "Shift traffic 1, 10, 50, 100% with a gate at each step", "Drain the old colour"]),
+    "release-bad": (70, ["Start v1.6 beside the live colour", "Steady load through the public edge",
+                         "Shift traffic with a gate at each step", "Automatic rollback to the live colour"]),
+    "switch-back": (5, ["Put traffic back on the previous colour"]),
+    "ussd-booking": (5, ["Dial, choose English, enter the PIN", "Choose Keza, consent, symptoms",
+                         "Book; the mobile-money prompt", "Payment confirmed; SMS sent", "An unlinked number is told how to link"]),
+}
+GROUP = {"failure": "Failures", "sync": "EMR sync", "security": "Security and audit", "release": "Releases",
+         "control": "AI model", "traffic": "Patient journeys"}
+for _s in SCENARIOS:
+    _s["typical"], _s["steps"] = PLAN[_s["id"]]
+    _s["group"] = GROUP[_s["kind"]]
 
 
 def sh(args: list[str], timeout: float = 5) -> str:
@@ -384,7 +427,10 @@ def start_run(sid: str) -> dict:
                              env={**os.environ, "TERM": "dumb"})
         for raw in p.stdout:
             kind = "step" if "\x1b[36m" in raw else "fail" if "\x1b[31m" in raw else "pass" if "\x1b[32m" in raw else "out"
-            run["lines"].append({"at": time.time() * 1000, "kind": kind, "text": ANSI.sub("", raw.rstrip())})
+            text = ANSI.sub("", raw.rstrip())
+            run["lines"].append({"at": time.time() * 1000, "kind": kind, "text": text})
+            if kind == "step":
+                event(f"{s['title']}: {text.lstrip('> ')}", "step")
         p.wait()
         run["status"] = "passed" if p.returncode == 0 else "failed"
         run["ended"] = time.time() * 1000
