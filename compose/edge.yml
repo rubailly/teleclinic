@@ -6,9 +6,11 @@ services:
     image: haproxy:3.0.5-alpine
     volumes:
       - ./config/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    environment:
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-0}
     ports:
-      - "9080:9080"   # public edge
-      - "9404:9404"   # stats page (demo cockpit reads it)
+      - "${PUBLISH_IP:-0.0.0.0}:9080:9080"   # public edge
+      - "${PUBLISH_IP:-0.0.0.0}:9404:9404"   # stats page (demo cockpit reads it)
       - "127.0.0.1:9999:9999"   # runtime API (weights) for the release script; local only
     depends_on:
       apisix:
@@ -46,6 +48,8 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL}
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # Behind the TLS proxy on a server, the scheme and client address come from its X-Forwarded headers
+      KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       # Values substituted into the realm file at import
@@ -57,7 +61,7 @@ services:
       - ./config/keycloak/irembo-mock-realm.json:/opt/keycloak/data/import/irembo-mock-realm.json:ro
       - ./config/keycloak/themes/irembo:/opt/keycloak/themes/irembo:ro
     ports:
-      - "9180:8080"
+      - "${PUBLISH_IP:-0.0.0.0}:9180:8080"
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
       interval: 5s

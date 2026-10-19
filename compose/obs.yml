@@ -41,7 +41,7 @@ services:
       - ./config/grafana/provisioning:/etc/teleclinic/provisioning:ro
       - ./config/grafana/dashboards:/etc/teleclinic/dashboards:ro
     ports:
-      - "9700:3000"
+      - "${PUBLISH_IP:-0.0.0.0}:9700:3000"
     depends_on:
       prometheus:
         condition: service_healthy

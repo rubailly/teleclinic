@@ -66,7 +66,7 @@ services:
       PUBLIC_URL: ${IREMBOPAY_PUBLIC_URL}
       WEBHOOK_SECRET: ${IREMBOPAY_WEBHOOK_SECRET}
     ports:
-      - "9280:8000"   # hosted checkout page the browser is sent to
+      - "${PUBLISH_IP:-0.0.0.0}:9280:8000"   # hosted checkout page the browser is sent to
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 5s
@@ -86,7 +86,7 @@ services:
       IREMBOPAY_URL: http://irembopay-mock:8000
       VALKEY_HOST: valkey
     ports:
-      - "9380:8300"   # aggregator callback and the phone simulator
+      - "${PUBLISH_IP:-0.0.0.0}:9380:8300"   # aggregator callback and the phone simulator
     depends_on:
       valkey:
         condition: service_healthy

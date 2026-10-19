@@ -1,0 +1,21 @@
+# TLS proxy for a shared server reached by a domain (docs/SERVER.md): Caddy on ports 80 and 443, certificates from
+# Let's Encrypt, one subdomain per service (config/caddy/Caddyfile). Not used on the demo machine.
+name: teleclinic-proxy
+
+services:
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    # The host network: it reaches the stack on 127.0.0.1, where its ports listen on a server (PUBLISH_IP)
+    network_mode: host
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env (scripts/deploy/server-env.py --update --domain <domain>)}
+    volumes:
+      - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    mem_limit: 128m
+
+volumes:
+  caddy-data:
+  caddy-config:

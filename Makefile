@@ -8,7 +8,7 @@ MAVEN := docker run --rm -v "$(CURDIR)/services/core":/w -v teleclinic-m2:/root/
 	-v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
 	--add-host=host.docker.internal:host-gateway maven:3.9.9-eclipse-temurin-21 mvn -B -q $(MVN_NET)
 
-.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition ussd scenario-webhooks audit scenario-tamper scenario-sync scenario-identity scenario-emr-offline clinician logs ps release release-bad switch-back capacity interop-network emr-up emr-down emr-wipe emr-reset
+.PHONY: help up-lite down reset doctor test smoke journey scenario-kill-db-leader scenario-kill-kafka-broker scenario-partition ussd scenario-webhooks audit scenario-tamper scenario-sync scenario-identity scenario-emr-offline clinician logs ps release release-bad switch-back capacity interop-network proxy-up proxy-down emr-up emr-down emr-wipe emr-reset
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -33,6 +33,14 @@ reset: .env ## Back to a known state: remove containers and volumes, start again
 	@# is down, so the first poll after the reset reads the fresh seed
 	@if docker ps --format '{{.Names}}' | grep -q '^teleclinic-emr-openmrs-backend-1$$'; then python3 scripts/emr/seed.py --reset; fi
 	$(MAKE) up-lite
+
+PROXY := docker compose --project-directory . --env-file .env -f compose/proxy.yml
+
+proxy-up: .env ## On a server with a domain: HTTPS on subdomains through Caddy (docs/SERVER.md)
+	$(PROXY) up -d --wait
+
+proxy-down: ## Stop the TLS proxy
+	$(PROXY) down
 
 interop-network:
 	@docker network inspect teleclinic-interop >/dev/null 2>&1 || docker network create teleclinic-interop >/dev/null

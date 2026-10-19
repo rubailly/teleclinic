@@ -33,7 +33,7 @@ services:
     image: openmrs/openmrs-reference-application-3-gateway:3.7.x@sha256:8a8c78d6d974d3e071a6e29eb4679b4c84367c58ad16bb8b7dbe0d0a2234a14f
     restart: unless-stopped
     ports:
-      - "9880:80"   # OpenMRS O3: http://localhost:9880/openmrs/spa
+      - "${PUBLISH_IP:-0.0.0.0}:9880:80"   # OpenMRS O3: http://localhost:9880/openmrs/spa
     depends_on:
       openmrs-frontend: {condition: service_started}
       openmrs-backend: {condition: service_healthy}
@@ -120,7 +120,7 @@ services:
       PROXY_READ_TIMEOUT: 120
       CLIENT_MAX_BODY_SIZE: 50m
     ports:
-      - "9580:8080"   # eBuzima: http://localhost:9580 (Desk at /app)
+      - "${PUBLISH_IP:-0.0.0.0}:9580:8080"   # eBuzima: http://localhost:9580 (Desk at /app)
     depends_on:
       ebuzima-backend: {condition: service_healthy}
       ebuzima-websocket: {condition: service_started}
@@ -255,18 +255,18 @@ services:
       DISABLE_DB_SSL: "true"
       LISTEN_ADDRESS: 0.0.0.0
       PORT: "4000"
-      URL_SCHEME: http
+      URL_SCHEME: ${OPENFN_SCHEME:-http}
       # The address browsers use: Lightning's live pages refuse websocket origins it does not list
-      URL_HOST: ${PUBLIC_HOST:-localhost}
-      URL_PORT: "9480"
-      ORIGINS: http://${PUBLIC_HOST:-localhost}:9480
+      URL_HOST: ${OPENFN_HOST:-localhost}
+      URL_PORT: ${OPENFN_PORT:-9480}
+      ORIGINS: ${OPENFN_SCHEME:-http}://${OPENFN_HOST:-localhost}:${OPENFN_PORT:-9480}
       SECRET_KEY_BASE: ${OPENFN_SECRET_KEY_BASE}
       PRIMARY_ENCRYPTION_KEY: ${OPENFN_ENCRYPTION_KEY}
       WORKER_SECRET: ${OPENFN_WORKER_SECRET}
       WORKER_RUNS_PRIVATE_KEY: ${OPENFN_WORKER_RUNS_PRIVATE_KEY}
       LOG_LEVEL: info
     ports:
-      - "9480:4000"   # Lightning: http://localhost:9480 (runs, history)
+      - "${PUBLISH_IP:-0.0.0.0}:9480:4000"   # Lightning: http://localhost:9480 (runs, history)
     depends_on:
       openfn-db: {condition: service_healthy}
     healthcheck:

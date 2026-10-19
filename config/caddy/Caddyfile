@@ -1,0 +1,71 @@
+# TLS proxy for a shared server (compose/proxy.yml): one subdomain per service, certificates from Let's Encrypt.
+# The stack's ports listen on 127.0.0.1 there (PUBLISH_IP), so this is the only way in. DOMAIN comes from .env.
+(proxy) {
+	encode zstd gzip
+	header -Server
+}
+
+{$DOMAIN}, www.{$DOMAIN} {
+	redir https://app.{$DOMAIN}{uri}
+}
+
+# Patient, clinician, clerk and audit pages: the public edge (HAProxy, APISIX, core)
+app.{$DOMAIN} {
+	import proxy
+	reverse_proxy 127.0.0.1:9080
+}
+
+# Keycloak, the IremboAccount stand-in
+login.{$DOMAIN} {
+	import proxy
+	reverse_proxy 127.0.0.1:9180
+}
+
+# IremboPay mock (hosted checkout, webhook log)
+pay.{$DOMAIN} {
+	import proxy
+	reverse_proxy 127.0.0.1:9280
+}
+
+# USSD phone simulator and aggregator callback
+ussd.{$DOMAIN} {
+	import proxy
+	reverse_proxy 127.0.0.1:9380
+}
+
+ebuzima.{$DOMAIN} {
+	import proxy
+	reverse_proxy 127.0.0.1:9580
+}
+
+openmrs.{$DOMAIN} {
+	import proxy
+	redir / /openmrs/spa/
+	reverse_proxy 127.0.0.1:9880
+}
+
+# OpenFn Lightning (live pages use a websocket; Caddy passes it through)
+openfn.{$DOMAIN} {
+	import proxy
+	reverse_proxy 127.0.0.1:9480
+}
+
+grafana.{$DOMAIN} {
+	import proxy
+	reverse_proxy 127.0.0.1:9700
+}
+
+# Ops cockpit and runbooks (the cockpit asks for its own password)
+ops.{$DOMAIN} {
+	import proxy
+	reverse_proxy 127.0.0.1:9500
+}
+
+# HAProxy and database proxy stats pages
+stats.{$DOMAIN} {
+	import proxy
+	handle_path /db/* {
+		reverse_proxy 127.0.0.1:9405
+	}
+	reverse_proxy 127.0.0.1:9404
+}
