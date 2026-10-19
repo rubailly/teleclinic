@@ -243,7 +243,7 @@ async def send_event(p: dict, event_type: str, *, event: dict | None = None, sec
     if respect_config:
         if config["dropWebhooks"]:
             log.info("webhook %s for %s dropped (scenario: lost webhook)", event["eventId"], p["paymentId"])
-            deliveries.append({"eventId": event["eventId"], "label": "dropped", "status": None, "at": now_iso()})
+            deliveries.append({"eventId": event["eventId"], "paymentId": p["paymentId"], "type": event.get("type"), "label": "dropped", "status": None, "at": now_iso()})
             return
         if config["webhookDelaySeconds"]:
             await asyncio.sleep(config["webhookDelaySeconds"])
@@ -254,7 +254,7 @@ async def send_event(p: dict, event_type: str, *, event: dict | None = None, sec
         for attempt in range(1, 5):
             try:
                 r = await client.post(p["callbackUrl"], content=body, headers=headers)
-                deliveries.append({"eventId": event["eventId"], "label": label, "status": r.status_code,
+                deliveries.append({"eventId": event["eventId"], "paymentId": p["paymentId"], "type": event.get("type"), "label": label, "status": r.status_code,
                                    "response": r.text[:200], "attempt": attempt, "at": now_iso()})
                 log.info("webhook %s (%s) -> %s %s", event["eventId"], label, r.status_code, r.text[:120])
                 if r.status_code < 500:
@@ -296,9 +296,51 @@ async def scenario_webhook(pid: str, mode: str):
     return deliveries[-1]
 
 
+LABELS = {"normal": ("Webhook", "b-ok"), "duplicate": ("Duplicate (scenario)", "b-warn"),
+          "forged": ("Forged signature (scenario)", "b-bad"), "spoofed": ("False claim (scenario)", "b-bad"),
+          "dropped": ("Not delivered (scenario)", "b-muted")}
+STATUS_BADGE = {"SUCCEEDED": "b-ok", "PENDING": "b-warn", "FAILED": "b-bad", "REFUNDED": "b-muted"}
+LOG_CSS = """
+.page{max-width:980px;margin:26px auto;padding:0 20px;display:grid;gap:20px}
+.lead{margin:0 0 4px;color:#34495e;font-size:14.5px;line-height:1.5}
+table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.05em;
+color:#7c91a1;font-weight:800;padding:8px 10px;border-bottom:1px solid #e7edf3}td{padding:9px 10px;border-bottom:1px solid #e7edf3;vertical-align:top}
+tr:last-child td{border-bottom:0}.mono{font-family:ui-monospace,monospace;font-size:12.5px}
+.badge{display:inline-block;font-size:11.5px;font-weight:800;padding:2px 9px;border-radius:10px;white-space:nowrap}
+.b-ok{background:#e3f5ee;color:#0f996d}.b-warn{background:#fff4dc;color:#b86e00}.b-bad{background:#fdecee;color:#dc3545}.b-muted{background:#f3f5f6;color:#7c91a1}
+.empty{text-align:center;padding:26px 10px;color:#7c91a1}.answer{color:#34495e}
+"""
+
+
 @app.get("/admin/deliveries")
-def list_deliveries():
-    return deliveries[-50:]
+def list_deliveries(request: Request):
+    # The ops cockpit and the scripts read JSON; a person opening the page in a browser gets a readable log
+    if "text/html" not in request.headers.get("accept", ""):
+        return deliveries[-50:]
+    rows = "".join(
+        f"""<tr><td class="mono">{escape(d['at'][11:19])}</td><td class="mono">{escape(d.get('paymentId') or '')}</td>
+          <td><span class="badge {LABELS.get(d['label'], (d['label'], 'b-muted'))[1]}">{escape(LABELS.get(d['label'], (d['label'], ''))[0])}</span>
+          <div class="muted small">{escape(d.get('type') or '')}</div></td>
+          <td class="answer">{'' if d['status'] is None else f"<b>{d['status']}</b> "}<span class="small">{escape((d.get('response') or '')[:120])}</span></td></tr>"""
+        for d in reversed(deliveries[-50:]))
+    pays = "".join(
+        f"""<tr><td class="mono">{escape(p['createdAt'][11:19])}</td><td class="mono">{escape(p['paymentId'])}</td>
+          <td>{int(float(p['amount'])):,} {escape(p['currency'])}</td><td>{escape('Mobile money' if p['channel'] == 'MOBILE_MONEY' else 'Web checkout')}</td>
+          <td><span class="badge {STATUS_BADGE.get(p['status'], 'b-muted')}">{escape(p['status'])}</span></td></tr>"""
+        for p in reversed(list(payments.values())))
+    empty = ('<div class="empty">No payments yet. Book a consultation in the patient app or on the USSD simulator: '
+             'the payment and every webhook IremboPay sends for it appear here.</div>')
+    return HTMLResponse(f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="5"><title>IremboPay (mock): payments and webhooks</title><style>{CHECKOUT_CSS}{LOG_CSS}</style></head><body>
+<div class="mock">MOCK: labelled stand-in for IremboPay. No real money moves.</div>
+<div class="top"><div class="bar"><div class="mark"><b>irembo</b>Pay</div><div class="secure">Payments and webhooks · refreshes every 5 s</div></div></div>
+<div class="page">
+  <div class="card"><h2>Payments</h2><p class="lead">Payments TeleClinic created here, with the patient's share after the insurance check.</p>
+    {f'<table><tr><th>Created (UTC)</th><th>Payment</th><th>Amount</th><th>Channel</th><th>Status</th></tr>{pays}</table>' if payments else empty}</div>
+  <div class="card"><h2>Webhooks sent to TeleClinic</h2><p class="lead">Every webhook and what TeleClinic answered. The cockpit's webhook
+    scenario adds duplicates and a forged one: TeleClinic acknowledges the duplicates without acting twice, and refuses the forged one.</p>
+    {f'<table><tr><th>Time (UTC)</th><th>Payment</th><th>Sent</th><th>TeleClinic answered</th></tr>{rows}</table>' if deliveries else '<div class="empty">No webhooks yet.</div>'}</div>
+</div></body></html>""")
 
 
 @app.get("/v1/settlements")

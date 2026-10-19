@@ -23,6 +23,13 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import jakarta.servlet.http.HttpSession;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
+import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.access.AccessDeniedHandlerImpl;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
@@ -72,7 +79,8 @@ class SecurityConfig {
             throws Exception {
         var authorizationRequests = new DefaultOAuth2AuthorizationRequestResolver(registrations, "/oauth2/authorization");
         // PKCE for the confidential client too (Spring adds it by default only for public clients)
-        authorizationRequests.setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce());
+        authorizationRequests.setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce()
+                .andThen(SecurityConfig::promptForSwitch));
 
         var logoutSuccess = new OidcClientInitiatedLogoutSuccessHandler(registrations);
         logoutSuccess.setPostLogoutRedirectUri("{baseUrl}/");
@@ -110,8 +118,10 @@ class SecurityConfig {
                 .csrfTokenRequestHandler(eagerCsrfToken())
                 .ignoringRequestMatchers("/webhooks/**", "/internal/**", "/sync/inbound"))
             // APIs answer 401 instead of redirecting, so the apps can start the login themselves
-            .exceptionHandling(e -> e.defaultAuthenticationEntryPointFor(
-                    new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), new AntPathRequestMatcher("/api/**")));
+            .exceptionHandling(e -> e
+                    .defaultAuthenticationEntryPointFor(
+                            new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), new AntPathRequestMatcher("/api/**"))
+                    .accessDeniedHandler(explainOnPages()));
         return http.build();
     }
 
@@ -144,6 +154,32 @@ class SecurityConfig {
             }
             saved.onAuthenticationSuccess(request, response, authentication);
         };
+    }
+
+    /**
+     * Signed in, but with the wrong role for an app page (a patient opening /clerk/): a page that says so and offers
+     * to sign in as someone else, instead of a bare 403. APIs keep answering 403.
+     */
+    private static AccessDeniedHandler explainOnPages() {
+        AccessDeniedHandlerImpl api = new AccessDeniedHandlerImpl();
+        return (request, response, denied) -> {
+            String path = request.getRequestURI();
+            if (SessionController.isAppPage(path) && String.valueOf(request.getHeader("Accept")).contains("text/html")) {
+                response.sendRedirect("/ui/denied.html?page=" + URLEncoder.encode(path, StandardCharsets.UTF_8));
+                return;
+            }
+            api.handle(request, response, denied);
+        };
+    }
+
+    /** "Sign in as a different user" (GET /login?switch=true): IremboAccount shows its login form again. */
+    private static void promptForSwitch(OAuth2AuthorizationRequest.Builder builder) {
+        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes
+                && attributes.getRequest().getSession(false) != null
+                && Boolean.TRUE.equals(attributes.getRequest().getSession(false).getAttribute(SessionController.SWITCH))) {
+            attributes.getRequest().getSession(false).removeAttribute(SessionController.SWITCH);
+            builder.additionalParameters(params -> params.put("prompt", "login"));
+        }
     }
 
     /** Loads the token on every request so the XSRF-TOKEN cookie is always present for the apps. */

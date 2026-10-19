@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0063cf">
+  <title>TeleClinic: not available for this user</title>
+  <link rel="icon" href="/ui/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/ui/tc.css">
+  <style>
+    .denied { max-width: 560px; margin: -30px auto 40px; position: relative; z-index: 2; }
+    .denied .card { padding: 26px 28px; }
+    .denied .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+    .denied .who { background: var(--tint-2); border-radius: var(--radius); padding: 10px 14px; margin: 14px 0 0; }
+  </style>
+</head>
+<body>
+<div class="notice"><b>Prototype.</b> TeleClinic with synthetic data. Each page is for one role, as it would be in production.</div>
+<header class="topbar">
+  <div class="wrap">
+    <nav class="nav"><a class="wordmark" href="/app/"><b>Tele</b><span>Clinic</span></a></nav>
+    <div class="hero compact"><h1 id="title">This page is for another role</h1><p id="lead"></p></div>
+  </div>
+</header>
+<main class="wrap denied">
+  <div class="card">
+    <p id="why">You are signed in, but your account does not have the role this page needs.</p>
+    <p class="who" id="who" hidden></p>
+    <div class="actions">
+      <a class="btn btn-primary" id="switch" href="/login">Sign in as a different user</a>
+      <a class="btn btn-light" id="mine" href="/app/" hidden></a>
+    </div>
+  </div>
+</main>
+<script>
+  // Which page was refused, which role it needs, and where the signed-in user can go instead
+  const PAGES = {
+    clinician: { name: "the clinician queue", role: "clinician", user: "clinician1" },
+    clerk: { name: "identity review", role: "clerk", user: "clerk1" },
+    audit: { name: "the audit explorer", role: "auditor", user: "admin1" },
+    app: { name: "the patient app", role: "patient", user: "patient1 or patient2" },
+  };
+  const HOME = { patient: ["/app/", "Go to the patient app"], clinician: ["/clinician/", "Go to the clinician queue"],
+    clerk: ["/clerk/", "Go to identity review"], admin: ["/audit/", "Go to the audit explorer"] };
+  const page = new URLSearchParams(location.search).get("page") || "/app/";
+  const key = (/^\/(clinician|clerk|audit|app)\//.exec(page) || [, "app"])[1];
+  const want = PAGES[key];
+  document.getElementById("lead").textContent = `Open ${want.name} as a ${want.role}.`;
+  document.getElementById("why").innerHTML =
+    `${want.name[0].toUpperCase() + want.name.slice(1)} needs the <b>${want.role}</b> role. In the demo, sign in as <b>${want.user}</b>.`;
+  document.getElementById("switch").href = `/login?next=${encodeURIComponent("/" + key + "/")}&switch=true`;
+  fetch("/api/me").then((r) => r.ok ? r.json() : null).then((me) => {
+    if (!me) return;
+    const who = document.getElementById("who");
+    who.hidden = false;
+    who.textContent = `Signed in now as ${me.name || me.username} (${me.username}), role: ${(me.roles || []).join(", ") || "none"}.`;
+    const home = (me.roles || []).map((r) => HOME[r]).find(Boolean);
+    if (home && home[0] !== "/" + key + "/") {
+      const mine = document.getElementById("mine");
+      mine.hidden = false; mine.href = home[0]; mine.textContent = home[1];
+    }
+  });
+</script>
+</body>
+</html>

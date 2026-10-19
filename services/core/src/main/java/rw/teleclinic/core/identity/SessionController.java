@@ -4,6 +4,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -19,6 +21,7 @@ import org.springframework.web.servlet.view.RedirectView;
 class SessionController {
 
     static final String NEXT = "tc.next";
+    static final String SWITCH = "tc.switch";
     /** Where sign-in may send the browser back to: our own apps only, so "next" cannot be used to redirect away */
     private static final Pattern APP_PAGE = Pattern.compile("/(app|clinician|clerk|audit)(/[A-Za-z0-9._/-]*)?");
 
@@ -27,7 +30,15 @@ class SessionController {
     }
 
     @GetMapping("/login")
-    RedirectView login(@RequestParam(required = false) String next, HttpSession session) {
+    RedirectView login(@RequestParam(required = false) String next, @RequestParam(name = "switch", defaultValue = "false") boolean switchUser,
+                       HttpServletRequest request) throws ServletException {
+        if (switchUser) {
+            request.logout();  // end this session here; IremboAccount is then asked for a fresh login
+        }
+        HttpSession session = request.getSession();
+        if (switchUser) {
+            session.setAttribute(SWITCH, Boolean.TRUE);
+        }
         if (isAppPage(next)) {
             session.setAttribute(NEXT, next);
         }
