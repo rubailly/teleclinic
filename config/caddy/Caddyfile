@@ -24,6 +24,8 @@ login.{$DOMAIN} {
 # IremboPay mock (hosted checkout, webhook log)
 pay.{$DOMAIN} {
 	import proxy
+	# The mock has no page at /: open its webhook log (checkout pages are reached from the patient app)
+	redir / /admin/deliveries
 	reverse_proxy 127.0.0.1:9280
 }
 
@@ -64,6 +66,7 @@ ops.{$DOMAIN} {
 # HAProxy and database proxy stats pages
 stats.{$DOMAIN} {
 	import proxy
+	redir / /stats
 	handle_path /db/* {
 		reverse_proxy 127.0.0.1:9405
 	}

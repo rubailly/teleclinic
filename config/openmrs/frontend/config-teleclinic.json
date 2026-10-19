@@ -12,7 +12,9 @@
       "homepage-dashboard-slot": {
         "order": [
           "patient-lists-dashboard-link",
-          "clinical-appointments-dashboard-link",
+          "clinical-appointments-dashboard-link"
+        ],
+        "remove": [
           "service-queues-dashboard-link"
         ]
       }

@@ -46,8 +46,9 @@ services:
     environment:
       SPA_PATH: /openmrs/spa
       API_URL: /openmrs
-      # The distribution's config, then TeleClinic's (config/openmrs/frontend): home is Patient lists for every role, because the
-      # Service queues home page fails in the distribution without demo data (no queues are set up)
+      # The distribution's config, then TeleClinic's (config/openmrs/frontend): home is Patient lists and Service queues
+      # is off the home menu, because it fails in the distribution without demo data (no queues are set up). Removing it
+      # matters: before the session loads, the home page falls back to service-queues whatever the role settings say.
       SPA_CONFIG_URLS: /openmrs/spa/config-core_demo.json,/openmrs/spa/config-teleclinic.json
     volumes:
       - ./config/openmrs/frontend/config-teleclinic.json:/usr/share/nginx/html/config-teleclinic.json:ro
