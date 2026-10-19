@@ -32,10 +32,12 @@ const initials = (n) => String(n || "?").split(" ").map((p) => p[0]).slice(0, 2)
 
 function due(c) {
   if (!c.slaDueAt) return "";
-  const s = Math.round((new Date(c.slaDueAt) - Date.now()) / 1000);
-  const a = Math.abs(s);
-  const t = a >= 3600 ? `${Math.floor(a / 3600)}h ${String(Math.floor(a % 3600 / 60)).padStart(2, "0")}m` : `${Math.floor(a / 60)}:${String(a % 60).padStart(2, "0")}`;
-  return s < 0 ? `<span class="late">${t} late</span>` : `<span class="due">${t}</span>`;
+  // Time left (or late), not a clock time: "17:06" read like a time of day
+  const at = new Date(c.slaDueAt), s = Math.round((at - Date.now()) / 1000), a = Math.abs(s);
+  const t = a >= 3600 ? `${Math.floor(a / 3600)} h ${String(Math.floor(a % 3600 / 60)).padStart(2, "0")} min`
+    : a >= 60 ? `${Math.floor(a / 60)} min` : `${a} s`;
+  const when = `due at ${at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  return s < 0 ? `<span class="late" title="${when}">${t} late</span>` : `<span class="due" title="${when}">${t} left</span>`;
 }
 
 async function patient(id) {

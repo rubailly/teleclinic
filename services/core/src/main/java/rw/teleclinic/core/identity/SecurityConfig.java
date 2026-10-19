@@ -125,6 +125,8 @@ class SecurityConfig {
                 && String.valueOf(request.getHeader("Accept")).contains("text/html");
         HttpSessionRequestCache cache = new HttpSessionRequestCache();
         cache.setRequestMatcher(page);
+        // Return to the page as it was opened, without the "?continue" marker Spring adds by default
+        cache.setMatchingRequestParameterName(null);
         return cache;
     }
 
