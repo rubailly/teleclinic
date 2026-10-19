@@ -57,6 +57,9 @@ class SessionSecurityTests extends IntegrationTest {
         mvc.perform(get("/clerk/index.html").accept("text/html").with(oidcLogin()
                         .authorities(new SimpleGrantedAuthority("ROLE_patient"))))
                 .andExpect(header().string("Location", "/ui/denied.html?page=%2Fclerk%2Findex.html"));
+        mvc.perform(get("/clinician/").accept("text/html").with(oidcLogin()
+                        .authorities(new SimpleGrantedAuthority("ROLE_patient"))))
+                .andExpect(header().string("Location", "/ui/denied.html?page=%2Fclinician%2F"));
         mvc.perform(get("/api/audit/events").with(oidcLogin().authorities(new SimpleGrantedAuthority("ROLE_patient"))))
                 .andExpect(status().isForbidden());
     }

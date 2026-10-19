@@ -96,6 +96,8 @@ class SecurityConfig {
                 // Counts and timings only, scraped by Prometheus on the internal network; blocked at the public edge
                 .requestMatchers("/actuator/prometheus").permitAll()
                 .requestMatchers("/api/clinician/**", "/triage/v1/cases/*/review", "/triage/v1/cases/*/suggestion").hasRole("clinician")
+                // The queue page itself (its stylesheet is shared with the clerk page, so only the page)
+                .requestMatchers("/clinician/", "/clinician/index.html").hasRole("clinician")
                 // The audit trail and its explorer are for auditors (the admin role in the demo realm)
                 .requestMatchers("/api/audit/**", "/fhir/AuditEvent", "/audit/**").hasRole("admin")
                 // Identity review (clerks); the sync ledger is for administrators
