@@ -46,7 +46,11 @@ services:
     environment:
       SPA_PATH: /openmrs/spa
       API_URL: /openmrs
-      SPA_CONFIG_URLS: /openmrs/spa/config-core_demo.json
+      # The distribution's config, then TeleClinic's (config/openmrs/frontend): home is Patient lists for every role, because the
+      # Service queues home page fails in the distribution without demo data (no queues are set up)
+      SPA_CONFIG_URLS: /openmrs/spa/config-core_demo.json,/openmrs/spa/config-teleclinic.json
+    volumes:
+      - ./config/openmrs/frontend/config-teleclinic.json:/usr/share/nginx/html/config-teleclinic.json:ro
     mem_limit: 256m
     networks:
       emr: {aliases: [frontend]}

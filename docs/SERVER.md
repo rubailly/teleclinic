@@ -57,6 +57,6 @@ Plain HTTP on the server's address, as on the demo machine: fine for a demo with
 deployment puts TLS in front (a domain with Caddy, or a Cloudflare Tunnel), sets `SESSION_COOKIE_SECURE=true` and
 replaces SSH password login with keys.
 
-Known limit: OpenMRS's home page (Service queues) shows an error in the distribution without demo data, here as on the
-demo machine; the scenes use the patient chart, which works. `make capacity` is for a larger machine: its generators
-run on the same server as the stack.
+OpenMRS opens on Patient lists for every role (config/openmrs/frontend): its usual home page, Service queues, fails
+in the distribution without demo data, which sets up no queues. `make capacity` is for a larger machine: its
+generators run on the same server as the stack.

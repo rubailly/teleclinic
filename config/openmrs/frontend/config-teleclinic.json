@@ -1,0 +1,21 @@
+{
+  "@openmrs/esm-home-app": {
+    "defaultDashboardPerRole": {
+      "System Developer": "patient-lists",
+      "Provider": "patient-lists",
+      "Privilege Level: Full": "patient-lists",
+      "Privilege Level: High": "patient-lists",
+      "Authenticated": "patient-lists",
+      "Organizational: Registration Clerk": "patient-lists"
+    },
+    "extensionSlots": {
+      "homepage-dashboard-slot": {
+        "order": [
+          "patient-lists-dashboard-link",
+          "clinical-appointments-dashboard-link",
+          "service-queues-dashboard-link"
+        ]
+      }
+    }
+  }
+}
