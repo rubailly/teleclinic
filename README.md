@@ -1,16 +1,45 @@
 # TeleClinic reference platform
 
 A working implementation of the TeleClinic design (Irembo, Software Architect, Digital Health assignment). It runs
-the whole design, from USSD booking to EMR sync, and lets you break it on purpose to watch how it recovers.
+the whole design, from USSD booking to EMR sync, and its ops cockpit lets you break it on purpose and watch it
+recover.
 **All data is synthetic.** Where a national system could not be used, a stand-in is clearly labelled.
 
 - **Design document:** [`docs/TeleClinic_Technical_Design_Document.docx`](docs/TeleClinic_Technical_Design_Document.docx)
 - **Diagrams:** [`diagrams/`](diagrams/) (SVG and PNG, with their sources)
-- **Live demo:** https://app.teleclinic-demo.dev
+- **Live demo:** https://app.teleclinic-demo.dev, and the ops cockpit at https://ops.teleclinic-demo.dev
 
-## Try it online
+## Start with the ops cockpit
 
-Sign-in details are in the submission email. Every patient-facing user shares one demo password.
+**https://ops.teleclinic-demo.dev** (user `ops`, password in the submission email)
+
+The design document says the platform survives failures. The cockpit lets you cause them on the running system and
+watch. Each button runs a real scenario: the left of the page shows the live state (writes through the database
+proxy, requests through the edge, which node leads, whether payments reconcile), and the run panel on the right ticks
+off the scenario's steps and ends with a pass or fail and the measured result. Failure scenarios put the system back
+when they finish, so you can run them in any order. One runs at a time.
+
+| Scenario | What it proves | Measured | Same check from a shell |
+| --- | --- | --- | --- |
+| Kill the database leader | Failover under load with zero data loss | New leader in 17 to 21 s, 0 acknowledged writes lost | `make scenario-kill-db-leader` |
+| Cut the leader's node off the network | No split-brain: a minority stops writing | Never two writable leaders; same rows on every node after healing | `make scenario-partition` |
+| Stop a Kafka broker | Events survive a broker loss | 50 of 50 messages written with acks=all | `make scenario-kill-kafka-broker` |
+| The hospital record goes offline | EMR outages delay writes, never lose or duplicate them | Writes waited, then arrived once each, in order | `make scenario-emr-offline` |
+| Sync without loops (eBuzima) | Two-way sync without echoes | One encounter in the right health centre; echo dropped; p95 3.8 s | `make scenario-sync` |
+| Identity, safely | Link, never merge | Review, link, unlink, hard block and automatic link as designed | `make scenario-identity` |
+| Replay and forge payment webhooks | Money cannot be double-counted or faked | One payment; the forged webhook refused | `make scenario-webhooks` |
+| Purpose of use, consent and pgAudit | Every read is justified and recorded, even a DBA's | Refusals recorded; a psql query in the trail in about 1 s | `make audit` |
+| Tamper with the audit trail | Tampering is detected and attributed | Edited entry found, role named, alert in about 10 s | `make scenario-tamper` |
+| Release v1.5; rollback drill | Zero-downtime release without a cloud load balancer | 1,181 requests, 0 failed; a bad build rolled back automatically | `make release`, `make release-bad` |
+| Kill switch: model off, back on | The platform runs safely without the AI | New cases rules-only at once; clinicians see a banner | `scripts/scenarios/model-kill-switch.sh` |
+| Book from a basic phone | The USSD journey end to end | Slowest step 176 ms of a 1.5 s budget | `make ussd` |
+
+Each alert in [Grafana](https://grafana.teleclinic-demo.dev) links to its runbook, also listed in the cockpit under
+Runbooks. After killing the leader, "Database has no writable leader" fires within seconds and clears on its own.
+
+## The rest of the platform
+
+Every patient-facing user shares one demo password, sent with the submission.
 
 | What to look at | Where | Sign in as |
 | --- | --- | --- |
@@ -24,10 +53,9 @@ Sign-in details are in the submission email. Every patient-facing user shares on
 | OpenFn sync gateway: workflows and run history | https://openfn.teleclinic-demo.dev | in the email |
 | IremboPay stand-in: every webhook and the core's answer | https://pay.teleclinic-demo.dev | none |
 | Grafana: SLOs and alerts | https://grafana.teleclinic-demo.dev | none (read-only) |
-| Ops cockpit: run a failure scenario and watch it live | https://ops.teleclinic-demo.dev | `ops` |
 | Load balancer and database proxy status | https://stats.teleclinic-demo.dev | none |
 
-### A 15-minute tour
+A short tour of the patient journey:
 
 1. **Book from a basic phone.** In the USSD simulator, book for Uwase's daughter Keza. The safety advice appears in
    the same session; payment goes through a mobile-money prompt and ends with an SMS.
@@ -37,10 +65,7 @@ Sign-in details are in the submission email. Every patient-facing user shares on
    until you confirm or override (with a reason).
 4. **See the record in the EMR.** Keza's teleconsultation appears in eBuzima under Kimironko Health Centre. Eric's
    appears in the hospital's OpenMRS. OpenFn shows the runs that carried them.
-5. **Break something.** In the ops cockpit, kill the database leader or cut its node off the network. Writes resume
-   on a new leader in about 20 seconds and nothing acknowledged is lost. Grafana raises the alert, which links to
-   its runbook.
-6. **Check the audit.** As `patient2`, open "Who accessed my record" and find the clinician's read. In the audit
+5. **Check the audit.** As `patient2`, open "Who accessed my record" and find the clinician's read. In the audit
    explorer, Verify now recomputes the hash chain.
 
 ## Run it yourself
@@ -53,28 +78,11 @@ make emr-up     # once: eBuzima, OpenMRS and OpenFn (first start about 5 minutes
 make doctor     # every health check
 ```
 
-Local addresses are in [`docs/URLS.md`](docs/URLS.md). To install on a server with a domain and HTTPS, see
-[`docs/SERVER.md`](docs/SERVER.md).
-
-Each scene is a script that passes or fails and prints what it measured:
-
-| Command | What it shows | Measured |
-| --- | --- | --- |
-| `make journey`, `make ussd` | Web and USSD booking, guardian consent, co-payment, SMS | Slowest USSD step 176 ms (budget 1.5 s) |
-| `make scenario-webhooks` | A payment webhook replayed twice and forged once | One payment; the forged one refused |
-| `make clinician` | Human gate, escalate-only merge, kill switch, no identifiers in the AI zone | Orders refused until review |
-| `make scenario-kill-db-leader` | PostgreSQL leader killed during writes | Back in 17 to 21 s, 0 writes lost |
-| `make scenario-partition` | The leader's node cut off the network | Never two writable leaders |
-| `make scenario-kill-kafka-broker` | One of three brokers stopped | 50 of 50 messages written |
-| `make scenario-sync` | TeleClinic and eBuzima write the same record | One encounter, echoes dropped, p95 3.8 s |
-| `make scenario-identity` | Review, link, unlink, hard block, automatic link | National ID written back, then removed |
-| `make scenario-emr-offline` | The hospital's OpenMRS down mid-shift | Writes waited, then arrived once each |
-| `make audit`, `make scenario-tamper` | Purpose of use, consent, a hand-edited audit row | Edit found and attributed in about 10 s |
-| `make release`, `make release-bad` | Blue/green release under load, then a bad build | 0 failed requests; bad build rolled back |
-| `make capacity` | Web and USSD load, then a noisy client (run `make reset` after) | 140 requests/s on one core instance, 0 failed |
-
-`make reset` brings everything back to the demo data in about a minute. `make test` runs the core's unit and
-module-boundary tests.
+The cockpit is then at http://127.0.0.1:9500, and every scenario in the table above also runs from the shell. Other
+local addresses are in [`docs/URLS.md`](docs/URLS.md); to install on a server with a domain and HTTPS, see
+[`docs/SERVER.md`](docs/SERVER.md). `make reset` brings everything back to the demo data in about a minute,
+`make test` runs the core's unit and module-boundary tests, and `make capacity` runs the load test
+(140 requests/s on one core instance with 0 failures; run `make reset` after it).
 
 ## What is real and what is a stand-in
 
