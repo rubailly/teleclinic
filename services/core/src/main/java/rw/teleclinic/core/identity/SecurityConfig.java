@@ -25,13 +25,11 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import jakarta.servlet.http.HttpSession;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.access.AccessDeniedHandlerImpl;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.web.util.matcher.RequestMatcher;
@@ -79,11 +77,17 @@ class SecurityConfig {
             throws Exception {
         var authorizationRequests = new DefaultOAuth2AuthorizationRequestResolver(registrations, "/oauth2/authorization");
         // PKCE for the confidential client too (Spring adds it by default only for public clients)
-        authorizationRequests.setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce()
-                .andThen(SecurityConfig::promptForSwitch));
+        authorizationRequests.setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce());
 
-        var logoutSuccess = new OidcClientInitiatedLogoutSuccessHandler(registrations);
-        logoutSuccess.setPostLogoutRedirectUri("{baseUrl}/");
+        // Sign out at IremboAccount too. "Sign in as a different user" posts next=<app page>: the browser then comes
+        // back to that app's sign-in, so the next login form is empty instead of remembering the previous user
+        LogoutSuccessHandler logoutSuccess = (request, response, authentication) -> {
+            String next = request.getParameter("next");
+            var handler = new OidcClientInitiatedLogoutSuccessHandler(registrations);
+            handler.setPostLogoutRedirectUri(SessionController.isAppPage(next)
+                    ? "{baseUrl}/login?next=" + URLEncoder.encode(next, StandardCharsets.UTF_8) : "{baseUrl}/");
+            handler.onLogoutSuccess(request, response, authentication);
+        };
 
         http
             .authorizeHttpRequests(auth -> auth
@@ -172,16 +176,6 @@ class SecurityConfig {
             }
             api.handle(request, response, denied);
         };
-    }
-
-    /** "Sign in as a different user" (GET /login?switch=true): IremboAccount shows its login form again. */
-    private static void promptForSwitch(OAuth2AuthorizationRequest.Builder builder) {
-        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes
-                && attributes.getRequest().getSession(false) != null
-                && Boolean.TRUE.equals(attributes.getRequest().getSession(false).getAttribute(SessionController.SWITCH))) {
-            attributes.getRequest().getSession(false).removeAttribute(SessionController.SWITCH);
-            builder.additionalParameters(params -> params.put("prompt", "login"));
-        }
     }
 
     /** Loads the token on every request so the XSRF-TOKEN cookie is always present for the apps. */

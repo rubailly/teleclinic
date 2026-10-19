@@ -2,7 +2,9 @@ package rw.teleclinic.core.identity;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
@@ -22,6 +24,9 @@ class SessionSecurityTests extends IntegrationTest {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    org.springframework.security.oauth2.client.registration.ClientRegistrationRepository registrations;
 
     @Test
     void apiWithoutSessionAnswers401NotARedirect() throws Exception {
@@ -65,14 +70,13 @@ class SessionSecurityTests extends IntegrationTest {
     }
 
     @Test
-    void switchingUserAsksIremboAccountForAFreshLogin() throws Exception {
-        var session = mvc.perform(get("/login").param("next", "/clerk/").param("switch", "true"))
-                .andExpect(header().string("Location", "/oauth2/authorization/iremboaccount"))
-                .andReturn().getRequest().getSession();
-        mvc.perform(get("/oauth2/authorization/iremboaccount").session((org.springframework.mock.web.MockHttpSession) session))
-                .andExpect(header().string("Location", containsString("prompt=login")));
-        mvc.perform(get("/oauth2/authorization/iremboaccount"))
-                .andExpect(header().string("Location", not(containsString("prompt=login"))));
+    void signingOutToSwitchUserComesBackToThatAppsSignIn() throws Exception {
+        var irembo = oidcLogin().clientRegistration(registrations.findByRegistrationId("iremboaccount"));
+        mvc.perform(post("/logout").param("next", "/clerk/").with(csrf()).with(irembo))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(header().string("Location", containsString("post_logout_redirect_uri=http://localhost/login?next%3D%252Fclerk%252F")));
+        mvc.perform(post("/logout").param("next", "https://evil.example/").with(csrf()).with(irembo))
+                .andExpect(header().string("Location", not(containsString("evil"))));
     }
 
     @Test

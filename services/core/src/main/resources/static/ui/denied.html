@@ -11,6 +11,7 @@
     .denied { max-width: 560px; margin: -30px auto 40px; position: relative; z-index: 2; }
     .denied .card { padding: 26px 28px; }
     .denied .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+    .denied .actions form { margin: 0; }
     .denied .who { background: var(--tint-2); border-radius: var(--radius); padding: 10px 14px; margin: 14px 0 0; }
   </style>
 </head>
@@ -27,7 +28,8 @@
     <p id="why">You are signed in, but your account does not have the role this page needs.</p>
     <p class="who" id="who" hidden></p>
     <div class="actions">
-      <a class="btn btn-primary" id="switch" href="/login">Sign in as a different user</a>
+      <form method="post" action="/logout" id="switch-form"><input type="hidden" name="_csrf" id="csrf">
+        <input type="hidden" name="next" id="next"><button class="btn btn-primary" id="switch">Sign in as a different user</button></form>
       <a class="btn btn-light" id="mine" href="/app/" hidden></a>
     </div>
   </div>
@@ -48,7 +50,10 @@
   document.getElementById("lead").textContent = `Open ${want.name} as a ${want.role}.`;
   document.getElementById("why").innerHTML =
     `${want.name[0].toUpperCase() + want.name.slice(1)} needs the <b>${want.role}</b> role. In the demo, sign in as <b>${want.user}</b>.`;
-  document.getElementById("switch").href = `/login?next=${encodeURIComponent("/" + key + "/")}&switch=true`;
+  // Signing out (here and at IremboAccount) comes back to this page's sign-in with an empty login form
+  document.getElementById("next").value = "/" + key + "/";
+  document.getElementById("csrf").value =
+    decodeURIComponent((document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/) || [])[1] || "");
   fetch("/api/me").then((r) => r.ok ? r.json() : null).then((me) => {
     if (!me) return;
     const who = document.getElementById("who");
