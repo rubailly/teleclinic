@@ -41,6 +41,11 @@
     if (me !== undefined) return me;
     const r = await api("GET", "/api/me");
     me = r.ok ? r.data : null;
+    // Staff who signed in here go to their own page: the patient app has nothing to show a clinician
+    const roles = me?.roles || [];
+    const home = roles.includes("patient") ? null : roles.includes("clinician") ? "/clinician/"
+      : roles.includes("clerk") ? "/clerk/" : roles.includes("admin") ? "/audit/" : null;
+    if (home) { location.replace(home); return new Promise(() => {}); }
     return me;
   }
 
